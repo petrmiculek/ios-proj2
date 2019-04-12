@@ -13,21 +13,26 @@ CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
 LFLAGS=-lpthread # @TODO needed?
 BIN=proj2
 SOURCES=proj2.c
+TESTS=tests.sh
+RM=rm
 
 .PHONY: clean
 
 all:
 	$(CC) $(CFLAGS) $(SOURCES) -o $(BIN) $(LFLAGS)
 
-run: all
-	./$(BIN)
-
 clean:
-	rm -f $(BIN) *.o
+        $(RM) *.o core *.out
+
+cleanall: clean
+        $(RM) $(EXEC)
 
 zip: *.c *.h Makefile
 	zip xmicul08.zip *.c *.h Makefile
 
-leaks: primes
+leaks: $(BIN)
 	valgrind --track-origins=yes --leak-check=full --show-reachable=yes ./$(BIN) $(CMDLINE)
+
+test: all
+	./$(TESTS) $(BIN)
 
