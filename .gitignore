@@ -1,3 +1,5 @@
 .vscode/*
 *.o
 proj2
+rivercrossing.out
+rivercrossing_test.out

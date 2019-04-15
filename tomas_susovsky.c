@@ -317,7 +317,7 @@ int main(int argc, char *argv[])
     }
 
 
-    if ((fp = fopen("rivercrossing.out", "w+")) == NULL)
+    if ((fp = fopen("rivercrossing_test.out", "w+")) == NULL)
     {                        // Opening output log has failed.
         fprintf(stderr, "%s", ERR_MSG[FOPEN]);
         return EXIT_SYS_FAILURE;

@@ -12,7 +12,7 @@ CC=gcc
 CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
 LFLAGS=-lrt -lpthread # @TODO needed?
 BIN=proj2
-SOURCES=tomas_susovsky.c # proj2.c error_msg.c
+SOURCES= proj2.c error_msg.c
 TESTS=check_syntax.sh
 RM=rm
 
