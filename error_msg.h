@@ -1,5 +1,5 @@
-#ifndef PROJ2_ERROR_H
-#define PROJ2_ERROR_H
+#ifndef ERROR_MSG_H
+#define ERROR_MSG_H
 /**
  * @author Petr Mičulek
  * @date 27. 4. 2019
@@ -22,4 +22,4 @@ void warning_msg(const char *fmt, ...);
  * @param ... content
  */
 void error_exit(const char *fmt, ...);
-#endif //PROJ2_ERROR_H
+#endif //ERROR_MSG_H

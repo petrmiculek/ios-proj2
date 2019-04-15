@@ -10,10 +10,10 @@
 
 CC=gcc
 CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
-LFLAGS=-lpthread # @TODO needed?
+LFLAGS=-lrt -lpthread # @TODO needed?
 BIN=proj2
-SOURCES=proj2.c
-TESTS=tests.sh
+SOURCES=tomas_susovsky.c # proj2.c error_msg.c
+TESTS=check_syntax.sh
 RM=rm
 
 .PHONY: clean
@@ -22,10 +22,10 @@ all:
 	$(CC) $(CFLAGS) $(SOURCES) -o $(BIN) $(LFLAGS)
 
 clean:
-        $(RM) *.o core *.out
+	$(RM) -f *.o core *.out
 
 cleanall: clean
-        $(RM) $(EXEC)
+	$(RM) $(BIN)
 
 zip: *.c *.h Makefile
 	zip xmicul08.zip *.c *.h Makefile

@@ -6,7 +6,7 @@
  * 			using processes, semaphores
  * */
 
-#include "error.h"
+#include "error_msg.h"
 #include <stdarg.h> // variadic
 #include <stdio.h>
 #include <stdlib.h> // exit(n)
