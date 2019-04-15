@@ -16,7 +16,7 @@ void warning_msg(const char *fmt, ...)
 {
     va_list args;
     va_start (args, fmt);
-    fprintf(stderr, "CHYBA: ");
+    fprintf(stderr, "Error: ");
     vfprintf (stderr, fmt, args);
     va_end (args);
 
