@@ -33,6 +33,12 @@ zip: *.c *.h Makefile
 leaks: $(BIN)
 	valgrind --track-origins=yes --leak-check=full --show-reachable=yes ./$(BIN) $(CMDLINE)
 
-test: all
-	./$(TESTS) $(BIN)
+test1: all
+	./$(BIN) 2 2 2 200 200 5
+
+test2: all
+	./$(BIN) 6 0 0 200 200 5
+
+tests: all
+	#./$(TESTS) $(BIN)
 

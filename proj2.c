@@ -8,6 +8,8 @@
 
 /// @TODO Check results of system calls
 
+// ./proj2 2 2 2 200 200 5
+// ./proj2 6 0 0 200 200 5
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -259,15 +261,16 @@ int barrier_init(barrier_t *barrier)
 {
 	errno = 0;
 
-	if(!(barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR)))
+	if((barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR)) == -1)
 	{
 		// shm_open returns -1 on error
 		warning_msg("%s: Error initializing shared mem\n", "barrier");
+	    PRINT_ERRNO_IF_SET();
 		return -1;
 	}
-	printf("-fd: %d-\n", barrier->barrier_shm_fd);
 
-	PRINT_ERRNO_IF_SET();	 
+	printf("fd: %d;\n", barrier->barrier_shm_fd);
+
 
 	// printf("%d, %d, %d,%d, %d, %d, %d \n", EACCES, EEXIST, EINVAL, EMFILE, ENAMETOOLONG, ENFILE, ENOENT);
 
@@ -275,14 +278,16 @@ int barrier_init(barrier_t *barrier)
 	errno = 0;
 	if((ftruncate(barrier->barrier_shm_fd, BARRIER_shm_SIZE)) == -1)
 	{
-		PRINT_ERRNO_IF_SET();
 		warning_msg("%s: Error truncating shared mem", "barrier");
+		PRINT_ERRNO_IF_SET();
 		return -1;
 
 	}
 
-	if((barrier->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, barrier->barrier_shm_size, 0)) == MAP_FAILED)
+    errno = 0;
+	if((barrier->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, barrier->barrier_shm_fd, 0)) == MAP_FAILED)
 	{
+		PRINT_ERRNO_IF_SET();
 		warning_msg("%s: Error mapping shared mem\n", "barrier");
 		return -1;
 	}
