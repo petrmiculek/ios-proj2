@@ -261,7 +261,7 @@ int barrier_init(barrier_t *barrier)
 {
 	errno = 0;
 
-	if((barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR)) == -1)
+	if((barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1)
 	{
 		// shm_open returns -1 on error
 		warning_msg("%s: Error initializing shared mem\n", "barrier");

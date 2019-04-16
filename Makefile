@@ -40,5 +40,7 @@ test2: all
 	./$(BIN) 6 0 0 200 200 5
 
 tests: all
-	#./$(TESTS) $(BIN)
+	./$(TESTS) $(BIN)
 
+manual-cleanup:
+	ls -a * | grep "xplagiat" | xargs rm
