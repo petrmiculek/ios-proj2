@@ -703,7 +703,9 @@ int fork_forge(FILE *fp, param *pm, int sleep, int category)
         i++;
 
         usleep((random() % (sleep)) * 1000);
-                             // Forking will happen in random time form 0ms to maximum time to generate child-process of given category.
+                             // Forking will happen in random time from 0
+                             // ms to maximum time to generate child-process
+                             // of given category.
         pid_fork = fork();
 
         if (pid_fork == 0)

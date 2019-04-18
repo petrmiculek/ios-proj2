@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 project(ios_proj2)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_C_STANDARD 11)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra -lrt -lpthread")
 include_directories(.)
@@ -12,3 +12,6 @@ add_executable(ios_proj2
         error_msg.c
         error_msg.h
         proj2.c)
+
+add_executable(fake
+        tomas_susovsky.c)
