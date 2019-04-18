@@ -120,8 +120,7 @@ int main(int argc, char **argv)
 
 		setbuf(stdout,NULL);
 		setbuf(stderr,NULL);
-
-		// vytvorime a inicializujeme barieru
+/*
 		barrier_t barrier1;
 		if(barrier_init(&barrier1) == -1)
 		{
@@ -130,12 +129,12 @@ int main(int argc, char **argv)
 		}
 		barrier_destroy(&barrier1);
 		
-/*
+*/
 		sync_t sync1;
 		if(sync_init(&sync1)){
 			warning_msg("sync_init\n");
 		}
-*/
+
 /*
 		int pid;
 
@@ -159,12 +158,12 @@ int main(int argc, char **argv)
 		// "cekani na skonceni vsech procesu"
 
 		// barrier_destroy(&barrier);
-/*
+
 		if(sync_destroy(&sync1))
 		{
 			return_value = 1;
 		}
-*/
+
 		if (fclose(fp) == -1)
     	{
 			warning_msg("%s: closing file", "main");
@@ -259,6 +258,7 @@ int parse_int(char *str)
 
 int barrier_init(barrier_t *barrier)
 {
+
 	errno = 0;
 
 	if((barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1)
@@ -315,27 +315,27 @@ int barrier_init(barrier_t *barrier)
 
 int sync_init(sync_t *sync1)
 {
-	int sync_shmID;
+    //int sync_shmID;
 
-	if(!(sync_shmID = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))){
+	if(!(sync1->sync_shm_fd = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))){
 		// shm_open returns -1 on error
 		warning_msg("%s: Error initializing shared mem\n", "sync");
 		return -1;
 	}
 
 	
-	if(ftruncate(sync_shmID, SYNC_shm_SIZE) == -1) {
+	if(ftruncate(sync1->sync_shm_fd , SYNC_shm_SIZE) == -1) {
 		warning_msg("%s: Error truncating shared mem\n", "sync");
 		return -1;
 	}
 
-	if((sync1->sync_shm = (int*)mmap(NULL, SYNC_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, sync_shmID, 0)) == MAP_FAILED) {
+	if((sync1->sync_shm = (int*)mmap(NULL, SYNC_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, sync1->sync_shm_fd, 0)) == MAP_FAILED) {
 		warning_msg("%s: Error mapping shared mem\n", "sync");
 		return -1;
 	}
 	
 
-	if((close(sync_shmID)) == -1) {
+	if((close(sync1->sync_shm_fd )) == -1) {
 		warning_msg("%s: Error closing shared mem\n", "sync");
 		return -1;
 	}
@@ -395,15 +395,17 @@ int barrier_destroy(barrier_t *barrier)  {
 
 
 	int return_value = 0;
+	
+	// sem*
 	if((sem_close(barrier->barrier_mutex) |
 		sem_close(barrier->barrier_sem))
 		== -1)
 	{
 		warning_msg("%s: closing semaphores\n", "barrier");
-		// @TODO consider returning in these branches
 		return_value = -1;
 	}
 
+	// name
 	if((sem_unlink(barrier_mutex_name) |
 		sem_unlink(barrier_sem_name))
 		== -1)
@@ -412,12 +414,14 @@ int barrier_destroy(barrier_t *barrier)  {
 		return_value = -1;
 	}
 
-	if(munmap(barrier->barrier_shm, barrier->barrier_shm_size) == -1)
+	// address, length
+	if(munmap(barrier->barrier_shm, BARRIER_shm_SIZE) == -1)
 	{
 		warning_msg("%s: un-mapping memory\n", "barrier");
 		return_value = -1;
 	}
 	
+	// name
 	if(shm_unlink(barrier_shm_name) == -1){
 		warning_msg("%s: un-linking memory\n", "barrier");
 		return_value = -1;
@@ -437,7 +441,6 @@ int sync_destroy(sync_t *sync1)  {
 		== -1)
 	{
 		warning_msg("%s: closing semaphores\n", "sync");
-		// @TODO consider returning in these branches
 		return_value = -1;
 	}
 
@@ -451,7 +454,7 @@ int sync_destroy(sync_t *sync1)  {
 		return_value = -1;
 	}
 
-	if(munmap(sync1->sync_shm, sync1->sync_shm_size) == -1)
+	if(munmap(sync1->sync_shm, SYNC_shm_SIZE) == -1)
 	{
 		warning_msg("%s: un-mapping memory\n", "sync");
 		return_value = -1;

@@ -42,5 +42,6 @@ test2: all
 tests: all
 	./$(TESTS) $(BIN)
 
+# delete shared memory objects that were not cleaned during runtime
 manual-cleanup:
-	ls -a * | grep "xplagiat" | xargs rm
+	./cleanup.sh
