@@ -31,8 +31,9 @@
 
 #include "error_msg.h"
 
-#define barrier_shm_name "/xplagiat00b-barrier_shm_name" // notice the s HHHH m
-#define barrier_sem_name "/xplagiat00b-barrier_sem_name" // notice the s EEEE m
+#define barrier_shm_name "/xplagiat00b-barrier_shm_name"
+#define barrier_turnstile1_name "/xplagiat00b-barrier_turnstile1_name"
+#define barrier_turnstile2_name "/xplagiat00b-barrier_turnstile2_name"
 #define barrier_mutex_name "/xplagiat00b-barrier_mutex_name"
 
 #define sync_shm_name "/xplagiat00b-sync_shm_name"
@@ -58,9 +59,10 @@
 #define PRINT_ERRNO_IF_SET() do { if(errno != 0) { warning_msg("errno = %d\n", errno); } else { printf("errno OK\n");} } while(0)
 
 struct Barrier_t {
-	sem_t *barrier_sem; // init 0
+	sem_t *turnstile1; // init 0
+	sem_t *turnstile2; // init 0
 	sem_t *barrier_mutex; // init 1
-	int *barrier_shm; // count; How to init?
+	int *barrier_shm; // count; init 0
 	int barrier_shm_size;
 	int barrier_shm_fd;
 } ;
@@ -92,7 +94,7 @@ void print_help();
 
 void DEBUG_print_args(int argc, const int *arguments);
 
-int barrier_init(barrier_t *p_shared);
+int barrier_init(barrier_t *p_barrier);
 int sync_init(sync_t *p_shared);
 
 int barrier_destroy(barrier_t *p_barrier);
@@ -104,6 +106,8 @@ void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile
 int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
 int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
 
+
+void row_boat(sync_t *pSync, const int pInt[ARGS_COUNT], FILE *pFile);
 
 int main(int argc, char **argv)
 {
@@ -278,6 +282,7 @@ int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp) 
 void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 {
 	bool is_captain = 0;
+	int hacker_number = p_shared->shared_mem[HACK];
 
 	sem_wait(p_shared->mutex);
 	p_shared->shared_mem[HACK]++;
@@ -310,13 +315,18 @@ void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 
 	sem_wait(p_shared->hacker_queue);
 
+
 	if(is_captain)
 	{
-		(void)is_captain; // @TODO remove
-
+        row_boat(p_shared, arguments, fp);
 		sem_post(p_shared->mutex);
 
+
 	}
+
+}
+
+void row_boat(sync_t *pSync, const int pInt[ARGS_COUNT], FILE *pFile) {
 
 }
 
@@ -361,59 +371,57 @@ int parse_int(char *str)
 	return (int)val;
 }
 
-int barrier_init(barrier_t *p_shared)
+int barrier_init(barrier_t *p_barrier)
 {
 
 	errno = 0;
 
-	if((p_shared->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1)
+	if((p_barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1)
 	{
 		// shm_open returns -1 on error
-		warning_msg("%s: Error initializing shared mem\n", "p_shared");
+		warning_msg("%s: Error initializing shared mem\n", "p_barrier");
 	    PRINT_ERRNO_IF_SET();
 		return -1;
 	}
 
-	// printf("fd: %d;\n", p_shared->barrier_shm_fd);
-
-
+	// printf("fd: %d;\n", p_barrier->barrier_shm_fd);
 	// printf("%d, %d, %d,%d, %d, %d, %d \n", EACCES, EEXIST, EINVAL, EMFILE, ENAMETOOLONG, ENFILE, ENOENT);
 
-
 	errno = 0;
-	if((ftruncate(p_shared->barrier_shm_fd, BARRIER_shm_SIZE)) == -1)
+	if((ftruncate(p_barrier->barrier_shm_fd, BARRIER_shm_SIZE)) == -1)
 	{
-		warning_msg("%s: Error truncating shared mem", "p_shared");
+		warning_msg("%s: Error truncating shared mem", "p_barrier");
 		PRINT_ERRNO_IF_SET();
 		return -1;
-
 	}
 
     errno = 0;
-	if((p_shared->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_shared->barrier_shm_fd, 0)) == MAP_FAILED)
+	if((p_barrier->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_barrier->barrier_shm_fd, 0)) == MAP_FAILED)
 	{
 		PRINT_ERRNO_IF_SET();
-		warning_msg("%s: Error mapping shared mem\n", "p_shared");
+		warning_msg("%s: Error mapping shared mem\n", "p_barrier");
 		return -1;
 	}
 	
-	// *shm = 0
-	
-	*(p_shared->barrier_shm) = 0; // @TODO Do I really init(p_shared, 0)
+	*(p_barrier->barrier_shm) = 0;
 
-	if((p_shared->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED)
+	if((p_barrier->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED)
 	{
-		warning_msg("%s,%s: Error initializing semaphore\n", "p_shared", "1");
+		warning_msg("%s,%s: Error initializing semaphore\n", "p_barrier", "1");
 		return -1;
 	}
 
-	if((p_shared->barrier_sem = sem_open(barrier_sem_name, O_CREAT, 0644, LOCKED)) == SEM_FAILED)
+	if((p_barrier->turnstile1 = sem_open(barrier_turnstile1_name, O_CREAT, 0644, LOCKED)) == SEM_FAILED)
 	{
-		warning_msg("%s,%s: Error initializing semaphore\n", "p_shared", "2");
+		warning_msg("%s,%s: Error initializing semaphore\n", "p_barrier", "2");
 		return -1;
 	}
 
-
+    if((p_barrier->turnstile2 = sem_open(barrier_turnstile2_name, O_CREAT, 0644, LOCKED)) == SEM_FAILED)
+    {
+        warning_msg("%s,%s: Error initializing semaphore\n", "p_barrier", "2");
+        return -1;
+    }
 
 	return 0;
 }
@@ -476,15 +484,13 @@ int sync_init(sync_t *p_shared)
 }
 
 int barrier_destroy(barrier_t *p_barrier)  {
-	// @TODO shared mem clear
-
-
 
 	int return_value = 0;
 	
 	// sem*
 	if((sem_close(p_barrier->barrier_mutex) |
-		sem_close(p_barrier->barrier_sem))
+		sem_close(p_barrier->turnstile1)|
+		sem_close(p_barrier->turnstile2))
 		== -1)
 	{
 		warning_msg("%s: closing semaphores\n", "p_barrier");
@@ -493,7 +499,8 @@ int barrier_destroy(barrier_t *p_barrier)  {
 
 	// name
 	if((sem_unlink(barrier_mutex_name) |
-		sem_unlink(barrier_sem_name))
+		sem_unlink(barrier_turnstile1_name)|
+		sem_unlink(barrier_turnstile2_name))
 		== -1)
 	{
 		warning_msg("%s: unlinking semaphores\n", "p_barrier");

@@ -763,15 +763,15 @@ int fork_forge(FILE *fp, param *pm, int sleep, int category)
 void fork_child(FILE *fp, param *pm, int category, int i, int *y)
 {
     sem_wait(sem_log);       // Child-process was created and reports it to the log.
-    fprintf(fp, "%-3d: %-15s: %d: started\n", counter(y, 1), CATEGORY[category], i);
+        fprintf(fp, "%-3d: %-15s: %d: started\n", counter(y, 1), CATEGORY[category], i);
     sem_post(sem_log);
 
 
     sem_wait(sem_molo);     // To eneter the pier, processes must wait till current rivercrossing is over.
 
     sem_wait(sem_log);      // After entering the pier, process raise counter of waiting processes of its category and reports to the log.
-    counter(sharedN[category], MEMBER);
-    fprintf(fp, "%-3d: %-15s: %d: waiting for boarding: %d: %d\n", counter(y, 1), CATEGORY[category], i, *sharedN[0], *sharedN[1]);
+        counter(sharedN[category], MEMBER);
+        fprintf(fp, "%-3d: %-15s: %d: waiting for boarding: %d: %d\n", counter(y, 1), CATEGORY[category], i, *sharedN[0], *sharedN[1]);
     sem_post(sem_log);
 
     int prio = set_course_for_intercourse();
@@ -779,16 +779,16 @@ void fork_child(FILE *fp, param *pm, int category, int i, int *y)
 
     if (category == HACKER)
     {                        // Each processes category has quee of its own to protect from waittting-zombie-process to infiltrate their group.
-    sem_wait(sem_hacker_wait);
+        sem_wait(sem_hacker_wait);
     }
     else
     {
-    sem_wait(sem_serf_wait);
+        sem_wait(sem_serf_wait);
     }
 
 
     sem_wait(sem_log);       // After valid group is allowed to enter the ship, processes start boarding and report to the log.
-    fprintf(fp, "%-3d: %-15s: %d: boarding: %d: %d\n", counter(y, 1), CATEGORY[category], i, *sharedN[0], *sharedN[1]);
+        fprintf(fp, "%-3d: %-15s: %d: boarding: %d: %d\n", counter(y, 1), CATEGORY[category], i, *sharedN[0], *sharedN[1]);
     sem_post(sem_log);
 
 
@@ -800,14 +800,14 @@ void fork_child(FILE *fp, param *pm, int category, int i, int *y)
     if (prio == MEMBER)
     {
         sem_wait(sem_log);   // First three processes to board ship becomes members and report it to the log.
-        fprintf(fp, "%-3d: %-15s: %d: member\n", counter(y, 1), CATEGORY[category], i);
+            fprintf(fp, "%-3d: %-15s: %d: member\n", counter(y, 1), CATEGORY[category], i);
         sem_post(sem_log);
     }
 
     else if (prio == CAPTAIN)
     {
         sem_wait(sem_log);   // Last one to board ship becomes the ship's captain and reports it to the log.
-        fprintf(fp, "%-3d: %-15s: %d: captain\n", counter(y, 1), CATEGORY[category], i);
+            fprintf(fp, "%-3d: %-15s: %d: captain\n", counter(y, 1), CATEGORY[category], i);
         sem_post(sem_log);
 
         srand(time(NULL)*getpid());
@@ -823,24 +823,24 @@ void fork_child(FILE *fp, param *pm, int category, int i, int *y)
     sem_wait(sem_landing);
 
     sem_wait(sem_log);       // After crossing the river is finished, processes land and report it to the log.
-    fprintf(fp, "%-3d: %-15s: %d: landing: %d: %d\n", counter(y, 1), CATEGORY[category], i, *sharedN[0], *sharedN[1]);
+        fprintf(fp, "%-3d: %-15s: %d: landing: %d: %d\n", counter(y, 1), CATEGORY[category], i, *sharedN[0], *sharedN[1]);
     sem_post(sem_log);
 
     get_on_board(sharedSEAT, sem_molo, MEMBER, SHIP_CAPACITY);
                              // After all landed successfuly, next process is allowed to enter the pier.
 
     sem_wait(sem_counter);
-    if (*sharedCounter == pm -> p * 10)
-    {                        // Checks if all processes crossed the river, if so, unlocks finish semaphore for them.
-                             // If not, waits for last process to cross the river and do it.
-        sem_shop(sem_finish, pm -> p * 2);
-    }
+        if (*sharedCounter == pm -> p * 10)
+        {                        // Checks if all processes crossed the river, if so, unlocks finish semaphore for them.
+                                 // If not, waits for last process to cross the river and do it.
+            sem_shop(sem_finish, pm -> p * 2);
+        }
     sem_post(sem_counter);
 
     sem_wait(sem_finish);    // FINISH LINE.
 
     sem_wait(sem_log);       // If all processes crossed the river, process can report to the log, that its finished.
-    fprintf(fp, "%-3d: %-15s: %d: finished\n", counter(y, 1), CATEGORY[category], i);
+        fprintf(fp, "%-3d: %-15s: %d: finished\n", counter(y, 1), CATEGORY[category], i);
     sem_post(sem_log);
 
                              // At long last. No process crosses the river forever, my child-process.
