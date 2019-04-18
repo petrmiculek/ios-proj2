@@ -46,4 +46,4 @@ tests: all
 
 # delete shared memory objects that were not cleaned during runtime
 manual-cleanup:
-	./cleanup.sh
+	./cleanup.sh $(CMDLINE)

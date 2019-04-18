@@ -4,9 +4,9 @@
  * @title IOS Projekt 2 - Synchronizace procesů 
  * @desc River crossing problem implementation in C,
  * 			using processes, semaphores
+ *
  * */
 
-/// @TODO Check results of system calls
 
 // ./proj2 2 2 2 200 200 5
 // ./proj2 6 0 0 200 200 5
@@ -30,84 +30,8 @@
 #include <signal.h>
 
 #include "error_msg.h"
+#include "proj2.h"
 
-#define barrier_shm_name "/xplagiat00b-barrier_shm_name"
-#define barrier_turnstile1_name "/xplagiat00b-barrier_turnstile1_name"
-#define barrier_turnstile2_name "/xplagiat00b-barrier_turnstile2_name"
-#define barrier_mutex_name "/xplagiat00b-barrier_mutex_name"
-
-#define sync_shm_name "/xplagiat00b-sync_shm_name"
-#define sync_hacker_queue_name "/xplagiat00b-sync_hacker_queue_name"
-#define sync_serf_queue_name "/xplagiat00b-sync_serf_queue_name"
-#define sync_mutex_name "/xplagiat00b-sync_mutex_name"
-
-// @TODO Implement or Discard macros
-#define ARGS_COUNT 6
-#define LOCKED 0
-#define BARRIER_BUFSIZE 1
-#define SYNC_BUFSIZE 3 // action_count, hacker_count, serf_count
-#define BARRIER_shm_SIZE sizeof(int)*BARRIER_BUFSIZE
-#define SYNC_shm_SIZE sizeof(int)*SYNC_BUFSIZE
-
-#define ACTION 0
-#define HACK 1
-#define SERF 2
-
-#define BOAT_CAPACITY 4
-#define SEM_ACCESS_RIGHTS 0644
-
-#define PRINT_ERRNO_IF_SET() do { if(errno != 0) { warning_msg("errno = %d\n", errno); } else { printf("errno OK\n");} } while(0)
-
-struct Barrier_t {
-	sem_t *turnstile1; // init 0
-	sem_t *turnstile2; // init 0
-	sem_t *barrier_mutex; // init 1
-	int *barrier_shm; // count; init 0
-	int barrier_shm_size;
-	int barrier_shm_fd;
-} ;
-typedef struct Barrier_t barrier_t;
-	
-struct Sync_t {
-	barrier_t* barrier;
-	sem_t* mutex; // init 1
-	sem_t* hacker_queue; // init 0
-	sem_t* serf_queue; // init 0
-	int *shared_mem; // hacker_count, serf_count
-	//int *action_count_shm;
-	int shared_mem_size;
-	int shared_mem_fd;
-} ;
-typedef struct Sync_t sync_t;
-
-
-/**
- *
- * @param str string to parse from
- * @return valid integer value from string if the format is valid
- *		 -1 on invalid format
- */
-int parse_int(char *str);
-
-// @TODO f-doc
-void print_help();
-
-void DEBUG_print_args(int argc, const int *arguments);
-
-int barrier_init(barrier_t *p_barrier);
-int sync_init(sync_t *p_shared);
-
-int barrier_destroy(barrier_t *p_barrier);
-int sync_destroy(sync_t *p_shared);
-
-void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile);
-void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile);
-
-int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
-int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
-
-
-void row_boat(sync_t *pSync, const int pInt[ARGS_COUNT], FILE *pFile);
 
 int main(int argc, char **argv)
 {
@@ -138,16 +62,20 @@ int main(int argc, char **argv)
 
 
     // ######## INITIALIZING ########
-
     FILE* fp;
+#ifdef NDEBUG
     if ((fp = fopen("rivercrossing.out", "w+")) == NULL){
     warning_msg("%s: opening output file","main");
     return 1;
     }
 
+    setbuf(fp, NULL);
+#else
+    fp = stdout;
+#endif
+
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
-    setbuf(fp, NULL);
 
     barrier_t barrier1;
     if(barrier_init(&barrier1) == -1)
@@ -160,9 +88,7 @@ int main(int argc, char **argv)
     if(sync_init(&sync1)){
         warning_msg("sync_init\n");
     }
-
-
-
+    sync1.p_barrier = &barrier1;
 
 
 
@@ -244,10 +170,12 @@ int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp
     pid_t pid_hacker_2;
 
 
+
+
     for (int i = 0; i < arguments[0]; ++i) {
 
-        usleep((random() % (arguments[1])) * 1000);
-        // Forking will happen in random time from 0
+        usleep((random() % (arguments[1] + 1)) * 1000);
+        // Forking will happen in random time from 1
         // ms to maximum time to generate child-process
         // of given category.
         pid_hacker_2 = fork();
@@ -282,7 +210,8 @@ int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp) 
 void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 {
 	bool is_captain = 0;
-	int hacker_number = p_shared->shared_mem[HACK];
+	// @TODO safely increment [HACK_TOTAL]
+
 
 	sem_wait(p_shared->mutex);
 	p_shared->shared_mem[HACK]++;
@@ -297,7 +226,8 @@ void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 
 		is_captain = 1;
 	}
-	else if (p_shared->shared_mem[HACK] == 2 && p_shared->shared_mem[SERF] >= 2) {
+	else if (p_shared->shared_mem[HACK] == 2 && p_shared->shared_mem[SERF] >= 2)
+	{
 		sem_post(p_shared->hacker_queue);
 		sem_post(p_shared->hacker_queue);
 
@@ -309,31 +239,94 @@ void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 		
 		is_captain = 1;
 	}
-	else{
+	else
+    {
 		sem_post(p_shared->mutex); // not enough passengers, release mutex
 	}
 
 	sem_wait(p_shared->hacker_queue);
 
+	//board(HACK, p_shared); // only captain boards
 
-	if(is_captain)
+
+    reusable_barrier(p_shared->p_barrier);
+
+
+    if(is_captain)
 	{
-        row_boat(p_shared, arguments, fp);
+        row_boat(p_shared, arguments, fp, HACK);
 		sem_post(p_shared->mutex);
-
-
 	}
+    else
+    {
+        print_action(fp, p_shared , HACK, "member exits");
+    }
+
+
 
 }
 
-void row_boat(sync_t *pSync, const int pInt[ARGS_COUNT], FILE *pFile) {
+
+void print_action(FILE *fp, sync_t *p_shared, int role, char *action_string) {
+    char* role_string = (role ? "HACK" : "SERF");
+    int role_total = (role ? HACK_TOTAL : SERF_TOTAL);
+    fprintf(fp, "%-8d: %s %-10d: %-20s : %-8d : %d",
+            p_shared->shared_mem[ACTION],
+            role_string,
+            p_shared->shared_mem[role_total],
+            action_string,
+            p_shared->shared_mem[HACK],
+            p_shared->shared_mem[SERF]
+            );
 
 }
 
-void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile)
+
+void reusable_barrier(const barrier_t *p_barrier) {
+    // indentation shows "scope" of mutex lock
+    sem_wait(p_barrier->barrier_mutex);
+
+        *(p_barrier->barrier_shm) += 1;
+        if (*(p_barrier->barrier_shm) == BOAT_CAPACITY) {
+            sem_wait(p_barrier->turnstile2);
+            sem_post(p_barrier->turnstile1);
+        }
+
+    sem_post(p_barrier->barrier_mutex);
+
+    sem_wait(p_barrier->turnstile1);
+    sem_post(p_barrier->turnstile1);
+
+    sem_wait(p_barrier->barrier_mutex);
+
+        *(p_barrier->barrier_shm) -= 1;
+        if (*(p_barrier->barrier_shm) == 0) {
+            sem_wait(p_barrier->turnstile1);
+            sem_post(p_barrier->turnstile2);
+        }
+
+    sem_post(p_barrier->barrier_mutex);
+
+    sem_wait(p_barrier->turnstile2);
+    sem_post(p_barrier->turnstile2);
+}
+
+void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role) {
+    print_action(fp, p_shared, role, "boards");
+    (void) p_shared;
+    (void) arguments;
+    (void) fp;
+}
+
+void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 {
+    (void) p_shared;
+    (void) arguments;
+    (void) fp;
+
 	// symmetrical, swap vars
-    bool is_captain = 0;
+    // bool is_captain = 0;
+
 
     sem_wait(p_shared->mutex);
 
@@ -462,7 +455,7 @@ int sync_init(sync_t *p_shared)
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "1");
 		return -1;
 	}
-	//sem_close(p_shared->mutex);
+	// sem_close(p_shared->mutex);
 
 
 	if((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
@@ -470,14 +463,16 @@ int sync_init(sync_t *p_shared)
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "2");
 		return -1;
 	}
-	//sem_close(p_shared->hacker_queue);
+	// sem_close(p_shared->hacker_queue);
 
 	if((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
 	{
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "3");
 		return -1;
 	}
-	//sem_close(p_shared->serf_queue);
+	// sem_close(p_shared->serf_queue);
+
+	p_shared->shared_mem[ACTION] = 1;
 
 
 	return 0;
@@ -569,7 +564,7 @@ int sync_destroy(sync_t *p_shared)  {
 
 void print_help()
 {
-	printf("run like\n"
+	printf("Run like:\n"
 		   " ./proj2 P H S R W C\n"
 		   "	P - Hackers count == Serfs count\n"
 		   "	H - Hackers generation duration\n"
