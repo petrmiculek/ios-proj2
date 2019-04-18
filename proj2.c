@@ -67,16 +67,17 @@ struct Barrier_t {
 typedef struct Barrier_t barrier_t;
 	
 struct Sync_t {
-	barrier_t* sync_barrier;
-	sem_t* sync_mutex; // init 1
-	sem_t* sync_hacker_queue; // init 0
-	sem_t* sync_serf_queue; // init 0
-	int *sync_shm; // hacker_count, serf_count
+	barrier_t* barrier;
+	sem_t* mutex; // init 1
+	sem_t* hacker_queue; // init 0
+	sem_t* serf_queue; // init 0
+	int *shared_mem; // hacker_count, serf_count
 	//int *action_count_shm;
-	int sync_shm_size;
-	int sync_shm_fd;
+	int shared_mem_size;
+	int shared_mem_fd;
 } ;
 typedef struct Sync_t sync_t;
+
 
 /**
  *
@@ -91,21 +92,23 @@ void print_help();
 
 void DEBUG_print_args(int argc, const int *arguments);
 
-int barrier_init(barrier_t *p_sync);
-int sync_init(sync_t *p_sync);
+int barrier_init(barrier_t *p_shared);
+int sync_init(sync_t *p_shared);
 
 int barrier_destroy(barrier_t *p_barrier);
-int sync_destroy(sync_t *p_sync);
+int sync_destroy(sync_t *p_shared);
 
-void hacker_routine(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *pFile);
-void serf_routine(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *pFile);
+void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile);
+void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile);
 
-int generate_hackers(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *fp);
-int generate_serfs(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE* fp);
+int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
+int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
 
 
 int main(int argc, char **argv)
 {
+    // ######## ARGUMENTS CHECKING ########
+
 	int return_value = 0;
 	int arguments[ARGS_COUNT] = {0};
 
@@ -123,6 +126,14 @@ int main(int argc, char **argv)
     DEBUG_print_args(argc, arguments);
 
     // @TODO argument test
+
+
+
+
+
+
+
+    // ######## INITIALIZING ########
 
     FILE* fp;
     if ((fp = fopen("rivercrossing.out", "w+")) == NULL){
@@ -146,26 +157,15 @@ int main(int argc, char **argv)
         warning_msg("sync_init\n");
     }
 
-/*
-    pid_t pid;
 
-    for (int j = 0; j < 2; j++) {
-        for (int i = 1; i <= 5; i++) {
-            if ((pid = fork()) < 0) {
-                perror("fork");
-                //b_unlink();
-                exit(2);
-            }
-            if (pid == 0) {
-                //proc2(j*10+i);
-                fprintf(stdout, "process: %d\n", getpid());
-                usleep(4000);
-                exit(0);
-            }
-        }
-        usleep(1000);
-    }
-*/
+
+
+
+
+
+
+
+    // ######## FORKING ########
 
     pid_t pid_hacker = fork();
     if (pid_hacker == 0)
@@ -200,6 +200,9 @@ int main(int argc, char **argv)
     }
 
 
+
+    // ######## CLEANING UP ########
+
     for (int j = 0; j < (2 + (2 * arguments[0])); ++j) {
         wait(NULL);
     }
@@ -226,14 +229,13 @@ int main(int argc, char **argv)
         }
     }
 
-
-
-
-
 	return return_value;
 }
 
-int generate_hackers(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *fp) {
+
+
+
+int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp) {
 
     pid_t pid_hacker_2;
 
@@ -249,7 +251,7 @@ int generate_hackers(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *fp) 
         if (pid_hacker_2 == 0)
         {   // Forked child-process of given category.
 
-            hacker_routine(p_sync, arguments, fp);
+            hacker_routine(p_shared, arguments, fp);
         }
 
         else if (pid_hacker_2 < 0)
@@ -265,64 +267,66 @@ int generate_hackers(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *fp) 
     return 0;
 }
 
-int generate_serfs(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE* fp) {
-    (void)p_sync;
+int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp) {
+    (void)p_shared;
     (void)arguments;
     (void) fp;
     return 0;
 }
 
 
-void hacker_routine(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *fp)
+void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 {
 	bool is_captain = 0;
 
-	sem_wait(p_sync->sync_mutex);
-	p_sync->sync_shm[HACK]++;
+	sem_wait(p_shared->mutex);
+	p_shared->shared_mem[HACK]++;
 
-	if(p_sync->sync_shm[HACK] == 4)
+	if(p_shared->shared_mem[HACK] == 4)
 	{
-		sem_post(p_sync->sync_hacker_queue);
-		sem_post(p_sync->sync_hacker_queue);
-		sem_post(p_sync->sync_hacker_queue);
-		sem_post(p_sync->sync_hacker_queue);
-		p_sync->sync_shm[HACK] = 0; // hackers 4 -> 0
+		sem_post(p_shared->hacker_queue);
+		sem_post(p_shared->hacker_queue);
+		sem_post(p_shared->hacker_queue);
+		sem_post(p_shared->hacker_queue);
+		p_shared->shared_mem[HACK] = 0; // hackers 4 -> 0
 
 		is_captain = 1;
 	}
-	else if (p_sync->sync_shm[HACK] == 2 && p_sync->sync_shm[SERF] >= 2) {
-		sem_post(p_sync->sync_hacker_queue);
-		sem_post(p_sync->sync_hacker_queue);
+	else if (p_shared->shared_mem[HACK] == 2 && p_shared->shared_mem[SERF] >= 2) {
+		sem_post(p_shared->hacker_queue);
+		sem_post(p_shared->hacker_queue);
 
-		sem_post(p_sync->sync_serf_queue);
-		sem_post(p_sync->sync_serf_queue);
+		sem_post(p_shared->serf_queue);
+		sem_post(p_shared->serf_queue);
 
-		p_sync->sync_shm[SERF] -= 2;
-		p_sync->sync_shm[HACK] = 0;
+		p_shared->shared_mem[SERF] -= 2;
+		p_shared->shared_mem[HACK] = 0;
 		
 		is_captain = 1;
 	}
 	else{
-		sem_post(p_sync->sync_mutex); // not enough passengers, release mutex
+		sem_post(p_shared->mutex); // not enough passengers, release mutex
 	}
 
-	sem_wait(p_sync->sync_hacker_queue);
+	sem_wait(p_shared->hacker_queue);
 
 	if(is_captain)
 	{
 		(void)is_captain; // @TODO remove
 
-		sem_post(p_sync->sync_mutex);
+		sem_post(p_shared->mutex);
 
 	}
 
 }
 
-void serf_routine(sync_t *p_sync, const int arguments[ARGS_COUNT], FILE *pFile);
+void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *pFile)
 {
 	// symmetrical, swap vars
-	if(p_sync)
-		fprintf(stdout, "SERF\n");
+    bool is_captain = 0;
+
+    sem_wait(p_shared->mutex);
+
 }
 
 void DEBUG_print_args(int argc, const int *arguments) {
@@ -357,55 +361,55 @@ int parse_int(char *str)
 	return (int)val;
 }
 
-int barrier_init(barrier_t *p_sync)
+int barrier_init(barrier_t *p_shared)
 {
 
 	errno = 0;
 
-	if((p_sync->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1)
+	if((p_shared->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1)
 	{
 		// shm_open returns -1 on error
-		warning_msg("%s: Error initializing shared mem\n", "p_sync");
+		warning_msg("%s: Error initializing shared mem\n", "p_shared");
 	    PRINT_ERRNO_IF_SET();
 		return -1;
 	}
 
-	// printf("fd: %d;\n", p_sync->barrier_shm_fd);
+	// printf("fd: %d;\n", p_shared->barrier_shm_fd);
 
 
 	// printf("%d, %d, %d,%d, %d, %d, %d \n", EACCES, EEXIST, EINVAL, EMFILE, ENAMETOOLONG, ENFILE, ENOENT);
 
 
 	errno = 0;
-	if((ftruncate(p_sync->barrier_shm_fd, BARRIER_shm_SIZE)) == -1)
+	if((ftruncate(p_shared->barrier_shm_fd, BARRIER_shm_SIZE)) == -1)
 	{
-		warning_msg("%s: Error truncating shared mem", "p_sync");
+		warning_msg("%s: Error truncating shared mem", "p_shared");
 		PRINT_ERRNO_IF_SET();
 		return -1;
 
 	}
 
     errno = 0;
-	if((p_sync->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_sync->barrier_shm_fd, 0)) == MAP_FAILED)
+	if((p_shared->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_shared->barrier_shm_fd, 0)) == MAP_FAILED)
 	{
 		PRINT_ERRNO_IF_SET();
-		warning_msg("%s: Error mapping shared mem\n", "p_sync");
+		warning_msg("%s: Error mapping shared mem\n", "p_shared");
 		return -1;
 	}
 	
 	// *shm = 0
 	
-	*(p_sync->barrier_shm) = 0; // @TODO Do I really init(p_sync, 0)
+	*(p_shared->barrier_shm) = 0; // @TODO Do I really init(p_shared, 0)
 
-	if((p_sync->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED)
+	if((p_shared->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED)
 	{
-		warning_msg("%s,%s: Error initializing semaphore\n", "p_sync", "1");
+		warning_msg("%s,%s: Error initializing semaphore\n", "p_shared", "1");
 		return -1;
 	}
 
-	if((p_sync->barrier_sem = sem_open(barrier_sem_name, O_CREAT, 0644, LOCKED)) == SEM_FAILED)
+	if((p_shared->barrier_sem = sem_open(barrier_sem_name, O_CREAT, 0644, LOCKED)) == SEM_FAILED)
 	{
-		warning_msg("%s,%s: Error initializing semaphore\n", "p_sync", "2");
+		warning_msg("%s,%s: Error initializing semaphore\n", "p_shared", "2");
 		return -1;
 	}
 
@@ -414,58 +418,58 @@ int barrier_init(barrier_t *p_sync)
 	return 0;
 }
 
-int sync_init(sync_t *p_sync)
+int sync_init(sync_t *p_shared)
 {
     //int sync_shmID;
 
-	if(!(p_sync->sync_shm_fd = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))){
+	if(!(p_shared->shared_mem_fd = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))){
 		// shm_open returns -1 on error
 		warning_msg("%s: Error initializing shared mem\n", "sync");
 		return -1;
 	}
 
 	
-	if(ftruncate(p_sync->sync_shm_fd , SYNC_shm_SIZE) == -1) {
+	if(ftruncate(p_shared->shared_mem_fd , SYNC_shm_SIZE) == -1) {
 		warning_msg("%s: Error truncating shared mem\n", "sync");
 		return -1;
 	}
 
-	if((p_sync->sync_shm = (int*)mmap(NULL, SYNC_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_sync->sync_shm_fd, 0)) == MAP_FAILED) {
+	if((p_shared->shared_mem = (int*)mmap(NULL, SYNC_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_shared->shared_mem_fd, 0)) == MAP_FAILED) {
 		warning_msg("%s: Error mapping shared mem\n", "sync");
 		return -1;
 	}
 	
 
-	if((close(p_sync->sync_shm_fd )) == -1) {
+	if((close(p_shared->shared_mem_fd )) == -1) {
 		warning_msg("%s: Error closing shared mem\n", "sync");
 		return -1;
 	}
 
-	p_sync->sync_shm[0] = 0; // hacker_count
-	p_sync->sync_shm[1] = 0; // serf_count
-	p_sync->sync_shm[2] = 0; // action_count
+	p_shared->shared_mem[0] = 0; // hacker_count
+	p_shared->shared_mem[1] = 0; // serf_count
+	p_shared->shared_mem[2] = 0; // action_count
 
-	if((p_sync->sync_mutex = sem_open(sync_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED)
+	if((p_shared->mutex = sem_open(sync_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED)
 	{
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "1");
 		return -1;
 	}
-	//sem_close(p_sync->sync_mutex);
+	//sem_close(p_shared->mutex);
 
 
-	if((p_sync->sync_hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
+	if((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
 	{
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "2");
 		return -1;
 	}
-	//sem_close(p_sync->sync_hacker_queue);
+	//sem_close(p_shared->hacker_queue);
 
-	if((p_sync->sync_serf_queue = sem_open(sync_serf_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
+	if((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
 	{
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "3");
 		return -1;
 	}
-	//sem_close(p_sync->sync_serf_queue);
+	//sem_close(p_shared->serf_queue);
 
 
 	return 0;
@@ -516,12 +520,12 @@ int barrier_destroy(barrier_t *p_barrier)  {
 
 
 
-int sync_destroy(sync_t *p_sync)  {
+int sync_destroy(sync_t *p_shared)  {
    
 	int return_value = 0;
-	if((sem_close(p_sync->sync_hacker_queue) |
-		sem_close(p_sync->sync_serf_queue) |
-		sem_close(p_sync->sync_mutex))
+	if((sem_close(p_shared->hacker_queue) |
+		sem_close(p_shared->serf_queue) |
+		sem_close(p_shared->mutex))
 		== -1)
 	{
 		warning_msg("%s: closing semaphores\n", "sync");
@@ -538,7 +542,7 @@ int sync_destroy(sync_t *p_sync)  {
 		return_value = -1;
 	}
 
-	if(munmap(p_sync->sync_shm, SYNC_shm_SIZE) == -1)
+	if(munmap(p_shared->shared_mem, SYNC_shm_SIZE) == -1)
 	{
 		warning_msg("%s: unmapping memory\n", "sync");
 		return_value = -1;
@@ -549,8 +553,8 @@ int sync_destroy(sync_t *p_sync)  {
 		return_value = -1;
 	}
 
-	p_sync->sync_shm_fd = -1;
-	p_sync->sync_shm_size = 0;
+	p_shared->shared_mem_fd = -1;
+	p_shared->shared_mem_size = 0;
 
 
 	return return_value;
