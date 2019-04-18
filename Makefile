@@ -15,6 +15,7 @@ BIN=proj2
 SOURCES= proj2.c error_msg.c
 TESTS=check_syntax.sh
 RM=rm
+ARGS=6 0 0 200 200 5
 
 .PHONY: clean
 
@@ -31,13 +32,14 @@ zip: *.c *.h Makefile
 	zip xmicul08.zip *.c *.h Makefile
 
 leaks: $(BIN)
-	valgrind --track-origins=yes --leak-check=full --show-reachable=yes ./$(BIN) $(CMDLINE)
+	valgrind --track-origins=yes --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no --show-reachable=yes --trace-children=yes ./$(BIN) $(ARGS) $(CMDLINE)
+
 
 test1: all
 	./$(BIN) 2 2 2 200 200 5
 
 test2: all
-	./$(BIN) 6 0 0 200 200 5
+	./$(BIN) $(ARGS)
 
 tests: all
 	./$(TESTS) $(BIN)

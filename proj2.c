@@ -14,6 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include <errno.h>
+#include <string.h>
+#include <stdbool.h>
+#include <time.h>
+
 #include <semaphore.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -22,9 +28,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <errno.h>
-#include <string.h>
-#include <stdbool.h>
 
 #include "error_msg.h"
 
@@ -108,8 +111,7 @@ int main(int argc, char **argv)
 			arguments[i - 1] = parse_int(argv[i]);
 		}
 
-		// DEBUG_print_args(argc, arguments);
-		(void)arguments;
+		DEBUG_print_args(argc, arguments);
 
 		// init
 		FILE* fp;
@@ -118,18 +120,17 @@ int main(int argc, char **argv)
         return 1;
     	}
 
-		setbuf(stdout,NULL);
-		setbuf(stderr,NULL);
-/*
+		setbuf(stdout, NULL);
+		setbuf(stderr, NULL);
+		setbuf(fp, NULL);
+
 		barrier_t barrier1;
 		if(barrier_init(&barrier1) == -1)
 		{
 			warning_msg("barrier_init\n");
 
 		}
-		barrier_destroy(&barrier1);
-		
-*/
+
 		sync_t sync1;
 		if(sync_init(&sync1)){
 			warning_msg("sync_init\n");
@@ -155,13 +156,19 @@ int main(int argc, char **argv)
 			usleep(1000);
 		}
 */
-		// "cekani na skonceni vsech procesu"
+		// @TODO wait for processes to end
 
-		// barrier_destroy(&barrier);
+
+        if(barrier_destroy(&barrier1))
+        {
+            warning_msg("barrier_destroy\n");
+            return_value = 1;
+        }
 
 		if(sync_destroy(&sync1))
 		{
-			return_value = 1;
+            warning_msg("sync_destroy\n");
+            return_value = 1;
 		}
 
 		if (fclose(fp) == -1)
@@ -195,7 +202,7 @@ void hacker_routine(sync_t* sync)
 		// declare current process captain @TODO
 		is_captain = 1;
 	}
-	else if (sync->sync_shm[HACK] == 2 && sync->sync_shm[SERF] == 2) {
+	else if (sync->sync_shm[HACK] == 2 && sync->sync_shm[SERF] >= 2) {
 		sem_post(sync->sync_hacker_queue);
 		sem_post(sync->sync_hacker_queue);
 
@@ -213,7 +220,7 @@ void hacker_routine(sync_t* sync)
 
 	if(is_captain)
 	{
-		(void)is_captain;
+		(void)is_captain; // @TODO remove
 	}
 
 }
@@ -230,6 +237,7 @@ void DEBUG_print_args(int argc, const int *arguments) {
 	{
 		printf("%d, ", arguments[j - 1]);
 	}
+	puts("\n");
 }
 
 
@@ -269,7 +277,7 @@ int barrier_init(barrier_t *barrier)
 		return -1;
 	}
 
-	printf("fd: %d;\n", barrier->barrier_shm_fd);
+	// printf("fd: %d;\n", barrier->barrier_shm_fd);
 
 
 	// printf("%d, %d, %d,%d, %d, %d, %d \n", EACCES, EEXIST, EINVAL, EMFILE, ENAMETOOLONG, ENFILE, ENOENT);
@@ -349,7 +357,7 @@ int sync_init(sync_t *sync1)
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "1");
 		return -1;
 	}
-	sem_close(sync1->sync_mutex);
+	//sem_close(sync1->sync_mutex);
 
 
 	if((sync1->sync_hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
@@ -357,37 +365,18 @@ int sync_init(sync_t *sync1)
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "2");
 		return -1;
 	}
-	sem_close(sync1->sync_hacker_queue);
+	//sem_close(sync1->sync_hacker_queue);
 
 	if((sync1->sync_serf_queue = sem_open(sync_serf_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED)
 	{
 		warning_msg("%s,%s: Error initializing semaphore\n", "sync", "3");
 		return -1;
 	}
-	sem_close(sync1->sync_serf_queue);
+	//sem_close(sync1->sync_serf_queue);
 
 
 	return 0;
 }
-/*
-	int synchronization_init(barrier_t* barrier, sync_t* sync)
-	{
-		int barrier_shm_ID;
-		int sync_shm_ID;
-
-		errno = 0;
-		if((barrier_shm_ID = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR))
-			||(sync_shm_ID = shm_open(sync_sem_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))
-						== -1)
-		{
-			// shm_open returns -1 on error
-			warning_msg("%s: Error initializing shared mem", "1");
-			return -1;
-		}
-
-
-	}
-*/
 
 int barrier_destroy(barrier_t *barrier)  {
 	// @TODO shared mem clear
@@ -417,15 +406,17 @@ int barrier_destroy(barrier_t *barrier)  {
 	// address, length
 	if(munmap(barrier->barrier_shm, BARRIER_shm_SIZE) == -1)
 	{
-		warning_msg("%s: un-mapping memory\n", "barrier");
+		warning_msg("%s: unmapping memory\n", "barrier");
 		return_value = -1;
 	}
 	
 	// name
 	if(shm_unlink(barrier_shm_name) == -1){
-		warning_msg("%s: un-linking memory\n", "barrier");
+		warning_msg("%s: unlinking memory\n", "barrier");
 		return_value = -1;
 	}
+    barrier->barrier_shm_fd = -1;
+    barrier->barrier_shm_size = 0;
 
 	return return_value;
 }
@@ -456,14 +447,18 @@ int sync_destroy(sync_t *sync1)  {
 
 	if(munmap(sync1->sync_shm, SYNC_shm_SIZE) == -1)
 	{
-		warning_msg("%s: un-mapping memory\n", "sync");
+		warning_msg("%s: unmapping memory\n", "sync");
 		return_value = -1;
 	}
 
 	if(shm_unlink(sync_shm_name) == -1){
-		warning_msg("%s: un-linking memory\n", "sync");
+		warning_msg("%s: unlinking memory\n", "sync");
 		return_value = -1;
 	}
+
+	sync1->sync_shm_fd = -1;
+	sync1->sync_shm_size = 0;
+
 
 	return return_value;
 }

@@ -1,43 +1,4 @@
-// ----------------------------------------------------------------------------
 /**
-    File: rivercrossing.c
-
-    System:         Rivercrossing
-    Component Name: rivercrossing.c, Main module
-    Status:         Version 1.0 Release 1
-
-    Language: C
-
-    License: None
-    (c) Copyright Tomas Susovsky 2014
-
-    Date: 2014/05/04
-    Author: Tomas Susovsky
-    E-Mail: xsusov01@stud.fit.vutbr.cz
-
-
-    Description:    Main file for Rivercrossing program.
-                    This file contains all code for Rivercrossing program.
-
-                    Program Rivercrossing is 2nd school project in IOS - Operating Systems.
-                    (@Brno University of Technology Faculty of Information Technology)
-
-                    Program deals with process synchronization on example of river crossing problem.
-
-                    Program creates two categories of processes:
-                        Hackers (Linux users)
-                        Serfs ((c)Microsoft Windows users)
-
-                    Program synchronizes processes of both categories, so that in the simulation
-                    of sailing across the river sailed only processes of the same category
-                    or equal number of processes of each category.
-                    The crossing is simulated by boarding 4 process on "ship", last one boared
-                    becomes the ship's captain and is put to sleep for the time required for crossing.
-                    After the finishing the crossing, processes leave ship and it is ready for next crew.
-                    Crossing continues till ale processes are delivered.
-
-                    The aim of the project is the implementation of the synchronization process.
-                    (Usage of shared memory and semaphores).
 
 
     Notes:          Program arguments:
@@ -72,14 +33,7 @@
                 9)  sem_shop
 
 
-    Thread Safe: Hopefuly
-
-    Platform Dependencies: Linux/Intel (CenOS 6.5 compatibile)
-
-    Compiler Options: -std=gnu99 -Wall -Wextra -Werror -pedantic
-    Linker Options:   -lrt -lpthread
 */
-// ----------------------------------------------------------------------------
 
 // Libraries:
 // general:
