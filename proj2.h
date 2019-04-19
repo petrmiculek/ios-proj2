@@ -95,7 +95,7 @@ int parse_int(const char *str);
 
 // @TODO doxygen comments
 
-void DEBUG_print_args(const int argc, const int *arguments);
+void DEBUG_print_args(int argc, const int *arguments);
 
 int barrier_init(barrier_t *p_barrier);
 int sync_init(sync_t *p_shared);
@@ -112,7 +112,7 @@ int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
 
 void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order);
 
-void sleep_up_to(const int maximum_sleep_time);
+void sleep_up_to(int maximum_sleep_time);
 
 void print_help();
 
@@ -123,7 +123,7 @@ void print_help();
  * @param role
  * @param action_string
  */
-void print_action_plus_plus(FILE *fp, sync_t *p_shared, const int role, const int intra_role_order,
+void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order,
                             const char *action_string);
 
 #endif //IOS_PROJ2_PROJ2_H

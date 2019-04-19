@@ -450,7 +450,7 @@ void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int 
     sleep_up_to(arguments[TIME_BOAT]);
 }
 
-void sleep_up_to(const int maximum_sleep_time) {
+void sleep_up_to(int maximum_sleep_time) {
 
     useconds_t sleep_time = (random() % (maximum_sleep_time + 1)) * 1000;
     usleep(sleep_time);
@@ -458,7 +458,7 @@ void sleep_up_to(const int maximum_sleep_time) {
 }
 
 
-void DEBUG_print_args(const int argc, const int *arguments) {
+void DEBUG_print_args(int argc, const int *arguments) {
 	for (unsigned int j = 1; j < (unsigned int) argc; j++)
 	{
 		printf("%d, ", arguments[j - 1]);
@@ -675,7 +675,7 @@ int sync_destroy(sync_t *p_shared)  {
 }
 
 
-void print_action_plus_plus(FILE *fp, sync_t *p_shared, const int role, const int intra_role_order,
+void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order,
                             const char *action_string) {
     // value update and read should be atomic
     //sem_wait(p_shared->mem_lock);
