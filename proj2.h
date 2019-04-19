@@ -63,7 +63,6 @@ struct Barrier_t {
     sem_t *turnstile2; // init 0
     sem_t *barrier_mutex; // init 1
     int *barrier_shm; // .count = 0
-    int barrier_shm_size; // @TODO is already macro-defined, use or delete
     int barrier_shm_fd;
 } ;
 typedef struct Barrier_t barrier_t;
@@ -79,7 +78,6 @@ struct Sync_t {
     sem_t* serf_queue; // init 0
     int *shared_mem; // .action = 0, .hacker_count = 0,
                     // .serf_count = 0, .hack_total = 0, .serf_total = 0
-                    int shared_mem_size; //@TODO see barrier_shm_size
     int shared_mem_fd;
 } ;
 typedef struct Sync_t sync_t;

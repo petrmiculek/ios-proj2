@@ -625,7 +625,6 @@ int barrier_destroy(barrier_t *p_barrier)  {
 		return_value = -1;
 	}
     p_barrier->barrier_shm_fd = -1;
-    p_barrier->barrier_shm_size = 0;
 
 	return return_value;
 }
@@ -668,8 +667,6 @@ int sync_destroy(sync_t *p_shared)  {
 	}
 
 	p_shared->shared_mem_fd = -1;
-	p_shared->shared_mem_size = 0;
-
 
 	return return_value;
 }
