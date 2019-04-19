@@ -67,7 +67,7 @@
 // for checking, if ship is fully loaded:
 #define SHIP_CAPACITY 4
 // for checking failures of system functions:
-#define SYS_FAIL -1
+#define SYS_FAIL (-1)
 // for checking wrong arguments:
 #define ARG_FAIL 1
 // for returning 2 if system function fails:
@@ -746,7 +746,7 @@ int fork_forge(FILE *fp, param *pm, int sleep, int category)
 **              all members that its safe to land.
 **            5)landing - processes leave ship and pier is ready for gathering
 **              of another processes, which would like to cross the river.
-**            6)finish - after all processes are safetly crossed, each sends its
+**            6)finish - after all processes have safely crossed, each sends its
 **              finish message and ends.
 **
 **
@@ -827,7 +827,7 @@ void fork_child(FILE *fp, param *pm, int category, int i, int *y)
     sem_post(sem_log);
 
     get_on_board(sharedSEAT, sem_molo, MEMBER, SHIP_CAPACITY);
-                             // After all landed successfuly, next process is allowed to enter the pier.
+    // After all landed successfully, next process is allowed to enter the pier.
 
     sem_wait(sem_counter);
         if (*sharedCounter == pm -> p * 10)

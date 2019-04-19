@@ -28,6 +28,10 @@
 #define BARRIER_shm_SIZE (sizeof(int)*BARRIER_BUFSIZE)
 #define SYNC_shm_SIZE (sizeof(int)*SYNC_BUFSIZE)
 
+#define BOAT_CAPACITY 4
+#define SEM_ACCESS_RIGHTS 0644 //@TODO Implement or throw away
+
+/// #warning Macros below ARE NOT ACTUAL VALUES of given variable
 // INDEXING macros for shm[...]
 #define ACTION 0
 #define HACK 1
@@ -43,10 +47,7 @@
 #define TIME_REQUEUE 4
 #define PIER_CAPACITY 5
 #define ARGS_COUNT 6
-
-
-#define BOAT_CAPACITY 4
-#define SEM_ACCESS_RIGHTS 0644 //@TODO Implement or throw away
+/// #endwarning
 
 #ifdef NDEBUG
 #define PRINT_ERRNO_IF_SET()
@@ -62,7 +63,7 @@ struct Barrier_t {
     sem_t *turnstile2; // init 0
     sem_t *barrier_mutex; // init 1
     int *barrier_shm; // .count = 0
-    int barrier_shm_size;
+    int barrier_shm_size; // @TODO is already macro-defined, use or delete
     int barrier_shm_fd;
 } ;
 typedef struct Barrier_t barrier_t;
@@ -78,7 +79,7 @@ struct Sync_t {
     sem_t* serf_queue; // init 0
     int *shared_mem; // .action = 0, .hacker_count = 0,
                     // .serf_count = 0, .hack_total = 0, .serf_total = 0
-    int shared_mem_size;
+                    int shared_mem_size; //@TODO see barrier_shm_size
     int shared_mem_fd;
 } ;
 typedef struct Sync_t sync_t;
@@ -90,11 +91,11 @@ typedef struct Sync_t sync_t;
  * @return valid integer value from string if the format is valid
  *		 -1 on invalid format
  */
-int parse_int(char *str);
+int parse_int(const char *str);
 
 // @TODO doxygen comments
 
-void DEBUG_print_args(int argc, const int *arguments);
+void DEBUG_print_args(const int argc, const int *arguments);
 
 int barrier_init(barrier_t *p_barrier);
 int sync_init(sync_t *p_shared);
@@ -111,9 +112,7 @@ int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
 
 void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order);
 
-void reusable_barrier(const barrier_t *p_barrier);
-
-void sleep_up_to(int arguments_index);
+void sleep_up_to(const int maximum_sleep_time);
 
 void print_help();
 
@@ -124,6 +123,7 @@ void print_help();
  * @param role
  * @param action_string
  */
-void print_action(FILE *fp, sync_t *p_shared, int role, char *action_string, int intra_role_order);
+void print_action_plus_plus(FILE *fp, sync_t *p_shared, const int role, const int intra_role_order,
+                            const char *action_string);
 
 #endif //IOS_PROJ2_PROJ2_H
