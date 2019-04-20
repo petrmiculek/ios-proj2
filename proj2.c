@@ -249,7 +249,7 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
     for (int j = 0; j < arguments[OF_EACH_TYPE]; ++j) {
         wait(NULL);
-        //printf(":Death accepted:\n");
+        //printf(":Death accepted:\n"); // DEBUG
     }
 
     // waitpid(-1, NULL, 0); // @TODO is this needed
@@ -278,6 +278,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     sem_wait(p_shared->mem_lock);
 
+    p_shared->shared_mem[role_total]++;
     intra_role_order = p_shared->shared_mem[role_total];
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
 
@@ -289,13 +290,14 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
 
 	sem_wait(p_shared->mem_lock);
-    //printf("\t%d got the mem-mutex\n", getpid()); // DEBUG
+    //printf("\t%d got the mem-lock\n", getpid()); // DEBUG
     p_shared->shared_mem[role]++;
-    p_shared->shared_mem[role_total]++;
+
+    print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
 
 	sem_post(p_shared->mem_lock);
 
-    //printf("\t%d released the mem-mutex\n", getpid()); // DEBUG
+    //printf("\t%d released the mem-lock\n", getpid()); // DEBUG
 
 
 	bool is_captain = 0;
@@ -323,19 +325,13 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
         is_captain = 1;
     } else {
         sem_post(p_shared->mutex); // not enough passengers, release mutex
-        //   printf("%d released the mutex\n", getpid()); // DEBUG
+        // printf("%d released the mutex\n", getpid()); // DEBUG
 
     }
-
-    if (!is_captain) {
-        sem_wait(p_shared->mem_lock);
-        print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
-        sem_post(p_shared->mem_lock);
-    }
-
 
     sem_wait(role_queue);
 
+    sem_wait(p_shared->boat_seat);
 
     if(is_captain)
     {
@@ -363,11 +359,20 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     if(is_captain)
 	{
+        sem_wait(p_shared->mem_lock);
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
-		sem_post(p_shared->mutex);
+        sem_post(p_shared->mem_lock);
+
+        // @TODO reconsider this
+        //sem_post(p_shared->mutex);
         // printf("%d released the mutex(cpt)\n", getpid()); // DEBUG
 
+        sem_post(p_shared->boat_seat);
+        sem_post(p_shared->boat_seat);
+        sem_post(p_shared->boat_seat);
+        sem_post(p_shared->boat_seat);
     }
+
 
     // processes exit
     exit(0);
@@ -415,79 +420,6 @@ void barrier_2(barrier_t *p_barrier) {
     //printf("\t%d passed t2\n", getpid()); // DEBUG
 }
 
-/*
-void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
-{
-    srand(time(NULL) * getpid());
-
-    // ###################################### CTRL-V ###############################
-    sem_wait(p_shared->mutex);
-    // printf("serf %d got the mutex\n", getpid()); // DEBUG
-
-
-    sem_wait(p_shared->mem_lock);
-
-    p_shared->shared_mem[SERF]++;
-    p_shared->shared_mem[SERF_TOTAL]++;
-
-    int intra_serf_order = p_shared->shared_mem[SERF_TOTAL];
-    print_action_plus_plus(fp, p_shared, SERF, intra_serf_order, "starts");
-    sem_post(p_shared->mem_lock);
-
-    bool is_captain = 0;
-
-
-    if (p_shared->shared_mem[SERF] == 4) {
-        sem_post(p_shared->serf_queue);
-        sem_post(p_shared->serf_queue);
-        sem_post(p_shared->serf_queue);
-        sem_post(p_shared->serf_queue);
-        p_shared->shared_mem[SERF] = 0; // hackers 4 -> 0
-
-        is_captain = 1;
-    } else if (p_shared->shared_mem[SERF] == 2 && p_shared->shared_mem[HACK] >= 2) {
-        sem_post(p_shared->serf_queue);
-        sem_post(p_shared->serf_queue);
-
-        sem_post(p_shared->hacker_queue);
-        sem_post(p_shared->hacker_queue);
-
-        p_shared->shared_mem[HACK] -= 2;
-        p_shared->shared_mem[SERF] = 0;
-
-        is_captain = 1;
-    } else {
-        sem_post(p_shared->mutex); // not enough passengers, release mutex
-        // printf("serf %d released the mutex\n", getpid()); // DEBUG
-    }
-
-    sem_wait(p_shared->serf_queue);
-
-
-    if (is_captain) {
-        // cpt should give up the mutex
-        row_boat(p_shared, arguments, fp, SERF, intra_serf_order); // cpt "boards"
-    }
-
-    barrier_1(p_shared->p_barrier);
-
-    if (!is_captain) {
-        sem_wait(p_shared->mem_lock);
-
-        print_action_plus_plus(fp, p_shared, SERF, intra_serf_order, "member exits");
-        sem_wait(p_shared->mem_lock);
-
-    }
-
-    barrier_2(p_shared->p_barrier);
-
-    if (is_captain) {
-        print_action_plus_plus(fp, p_shared, SERF, intra_serf_order, "captain exits"); // inside mutex
-        sem_post(p_shared->mutex);
-        // printf("serf %d released the mutex(Cpt)\n", getpid());
-    }
-}
-*/
 
 void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order)
 {
@@ -499,9 +431,10 @@ void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int 
     sem_post(p_shared->mem_lock);
 
 
+    // printf("%d releasing mutex\n", getpid()); // DEBUG
     sem_post(p_shared->mutex);
     sleep_up_to(arguments[TIME_BOAT]);
-    sem_wait(p_shared->mutex);
+    // sem_wait(p_shared->mutex);
 }
 
 void sleep_up_to(int maximum_sleep_time) {
@@ -607,6 +540,7 @@ int sync_init(sync_t *p_shared)
         return -1;
     }
 
+
     if ((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "sync", "3");
 		return -1;
@@ -618,6 +552,11 @@ int sync_init(sync_t *p_shared)
 		return -1;
 	}
 
+    if ((p_shared->boat_seat = sem_open(sync_boat_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
+        SEM_FAILED) {
+        warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
+        return -1;
+    }
 
     p_shared->shared_mem[ACTION] = 0;
     p_shared->shared_mem[HACK] = 0;
@@ -675,9 +614,10 @@ int sync_destroy(sync_t *p_shared)  {
    
 	int return_value = 0;
 	if((sem_close(p_shared->hacker_queue) |
-		sem_close(p_shared->serf_queue) |
-		sem_close(p_shared->mem_lock) |
-		sem_close(p_shared->mutex))
+        sem_close(p_shared->serf_queue) |
+        sem_close(p_shared->mem_lock) |
+        sem_close(p_shared->boat_seat) |
+        sem_close(p_shared->mutex))
 		== -1)
 	{
 		warning_msg("%s: closing semaphores\n", "sync");
@@ -686,9 +626,10 @@ int sync_destroy(sync_t *p_shared)  {
 
 
 	if((sem_unlink(sync_hacker_queue_name) |
-		sem_unlink(sync_serf_queue_name) |
-		sem_unlink(sync_mem_lock_name) |
-		sem_unlink(sync_mutex_name) )
+        sem_unlink(sync_serf_queue_name) |
+        sem_unlink(sync_mem_lock_name) |
+        sem_unlink(sync_boat_mutex_name) |
+        sem_unlink(sync_mutex_name) )
 		== -1)
 	{
 		warning_msg("%s: unlinking semaphores\n", "sync");
