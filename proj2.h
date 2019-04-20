@@ -38,7 +38,6 @@
 #define sync_mutex_name "/xplagiat00b-sync_mutex_name"
 #define sync_mem_lock_name "/xplagiat00b-sync_mem_lock_name"
 #define sync_boat_seat_name "/xplagiat00b-sync_boat_seat_name"
-#define sync_pier_space_name "/xplagiat00b-sync_pier_space_name"
 
 
 #define BARRIER_BUFSIZE 1 // count
@@ -97,7 +96,6 @@ struct Sync_t {
     sem_t* mem_lock; // init 1
     sem_t* hacker_queue; // init 0
     sem_t* serf_queue; // init 0
-    sem_t *pier_space; // init arg[PIER_CAPACITY]
     int *shared_mem; // .action = 0, .hacker_count = 0,
                     // .serf_count = 0, .hack_total = 0, .serf_total = 0
     int shared_mem_fd;
@@ -117,7 +115,8 @@ int parse_int(const char *str);
 
 int barrier_init(barrier_t *p_barrier);
 
-int sync_init(sync_t *p_shared, int pier_capacity);
+int sync_init(sync_t *p_shared); //, int pier_capacity
+// @TODO remove all pier_capacity vars
 
 int barrier_destroy(barrier_t *p_barrier);
 int sync_destroy(sync_t *p_shared);

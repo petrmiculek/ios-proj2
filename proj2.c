@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     }
 
     sync_t sync1;
-    if (sync_init(&sync1, arguments[PIER_CAPACITY])) {
+    if (sync_init(&sync1)) {
         warning_msg("sync_init\n");
     }
     sync1.p_barrier = &barrier1;
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
 
     for (int j = 0; j < (2 + (2 * arguments[OF_EACH_TYPE])); ++j) {
         wait(NULL);
-        //printf(":death %d accepted:\n", j);
+        //fprintf(stderr,":death %d accepted:\n", j);
     }
 
 
@@ -171,7 +171,7 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
         if (pid == 0)
         {
-            // printf(":%d:child:hack:\n", getpid());// DEBUG
+            // fprintf(stderr,":%d:child:hack:\n", getpid());// DEBUG
             passenger_routine(p_shared, arguments, fp, role);
         } else if (pid < 0)
         {
@@ -183,7 +183,7 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
     for (int j = 0; j < arguments[OF_EACH_TYPE]; ++j) {
         wait(NULL);
-        //printf(":Death accepted:\n"); // DEBUG
+        //fprintf(stderr,":Death accepted:\n"); // DEBUG
     }
 
     // waitpid(-1, NULL, 0); // @TODO is this needed
@@ -216,34 +216,39 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
 
     bool is_requeueing = 0;
+
+    fprintf(stderr, "%d checking out pier\n", getpid()); // DEBUG
     while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
         is_requeueing = 1;
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
+        fprintf(stderr, "%d releasing memlock(requeue)\n", getpid()); // DEBUG
         sem_post(p_shared->mem_lock);
         sleep_up_to(arguments[TIME_REQUEUE]);
         sem_wait(p_shared->mem_lock);
+        fprintf(stderr, "%d claimed memlock(requeue)(1)\n", getpid()); // DEBUG
     }
 
     if (is_requeueing) {
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", PRINT_PIER_STATE);
     }
     sem_post(p_shared->mem_lock);
+    fprintf(stderr, "%d releasing memlock(joined)\n", getpid()); // DEBUG
 
 
     sem_wait(p_shared->mutex);
-    // printf("%d got the mutex\n", getpid()); // DEBUG
+    // fprintf(stderr,"%d got the mutex\n", getpid()); // DEBUG
 
 
 
 	sem_wait(p_shared->mem_lock);
-    //printf("\t%d got the mem-lock\n", getpid()); // DEBUG
+    fprintf(stderr, "\t%d got the mem-lock(2)\n", getpid()); // DEBUG
     p_shared->shared_mem[role]++;
 
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
 
 	sem_post(p_shared->mem_lock);
 
-    //printf("\t%d released the mem-lock\n", getpid()); // DEBUG
+    fprintf(stderr, "\t%d released the mem-lock(2)\n", getpid()); // DEBUG
 
     sem_wait(p_shared->boat_seat);
     // process now holds both mutex and boat_seat, potential lock?
@@ -273,7 +278,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         is_captain = 1;
     } else {
         sem_post(p_shared->mutex); // not enough passengers, release mutex
-        // printf("%d released the mutex\n", getpid()); // DEBUG
+        // fprintf(stderr,"%d released the mutex\n", getpid()); // DEBUG
 
     }
 
@@ -286,6 +291,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         // captain needs to let go of the main mutex, so that other processes can queue at the pier
         // so row_boat frees it and uses mem_lock-mutex, instead
         row_boat(p_shared, arguments, fp, role, intra_role_order); // "boards"
+
     }
 
 
@@ -294,12 +300,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     if(!is_captain)
     {
 
-        //printf("\t%d waiting for memlock\n", getpid()); // DEBUG
+        fprintf(stderr, "\t%d waiting for memlock(4)\n", getpid()); // DEBUG
         sem_wait(p_shared->mem_lock);
-        //printf("\t%d taken memlock\n", getpid()); // DEBUG
+        fprintf(stderr, "\t%d taken memlock(4)\n", getpid()); // DEBUG
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "member exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock);
-        //printf("\t%d released memlock\n", getpid()); // DEBUG
+        fprintf(stderr, "\t%d released memlock(4)\n", getpid()); // DEBUG
     }
 
     barrier_2(p_shared->p_barrier);
@@ -307,13 +313,16 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     if(is_captain)
 	{
+        fprintf(stderr, "\t%d waiting for memlock(6)\n", getpid()); // DEBUG
         sem_wait(p_shared->mem_lock);
+        fprintf(stderr, "\t%d taken memlock(6)\n", getpid()); // DEBUG
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock);
+        fprintf(stderr, "\t%d released memlock(6)\n", getpid()); // DEBUG
 
         // @TODO reconsider this
         //sem_post(p_shared->mutex);
-        // printf("%d released the mutex(cpt)\n", getpid()); // DEBUG
+        // fprintf(stderr,"%d released the mutex(cpt)\n", getpid()); // DEBUG
 
         sem_post(p_shared->boat_seat);
         sem_post(p_shared->boat_seat);
@@ -329,15 +338,15 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order)
 {
-    //printf("\t%d waiting for memlock\n", getpid()); // DEBUG
+    fprintf(stderr, "\t%d waiting for memlock(5)\n", getpid()); // DEBUG
     sem_wait(p_shared->mem_lock);
-    //printf("\t%d taken memlock\n", getpid()); // DEBUG
+    fprintf(stderr, "\t%d taken memlock(5)\n", getpid()); // DEBUG
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
-    //printf("\t%d releasing memlock\n", getpid()); // DEBUG
+    fprintf(stderr, "\t%d releasing memlock(5)\n", getpid()); // DEBUG
     sem_post(p_shared->mem_lock);
 
 
-    // printf("%d releasing mutex\n", getpid()); // DEBUG
+    // fprintf(stderr,"%d releasing mutex\n", getpid()); // DEBUG
     sem_post(p_shared->mutex);
     sleep_up_to(arguments[TIME_BOAT]);
     // sem_wait(p_shared->mutex);
@@ -347,7 +356,7 @@ void sleep_up_to(int maximum_sleep_time) {
 
     useconds_t sleep_time = (random() % (maximum_sleep_time + 1)) * 1000;
     usleep(sleep_time);
-    // printf(":%d slept for %f:\n", getpid(), sleep_time / 1000.0);
+    // fprintf(stderr,":%d slept for %f:\n", getpid(), sleep_time / 1000.0);
 }
 
 int parse_int(const char *str)
@@ -407,7 +416,7 @@ int barrier_init(barrier_t *p_barrier)
 	return 0;
 }
 
-int sync_init(sync_t *p_shared, int pier_capacity)
+int sync_init(sync_t *p_shared) // ,int pier_capacity)
 {
     //int sync_shmID;
 
@@ -463,12 +472,13 @@ int sync_init(sync_t *p_shared, int pier_capacity)
         warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
         return -1;
     }
+    /*
     if ((p_shared->pier_space = sem_open(sync_pier_space_name, O_CREAT, SEM_ACCESS_RIGHTS, pier_capacity)) ==
         SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
         return -1;
     }
-
+     */
     p_shared->shared_mem[ACTION] = 0;
     p_shared->shared_mem[HACK] = 0;
     p_shared->shared_mem[SERF] = 0;
@@ -591,7 +601,7 @@ void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role
 
 void print_help()
 {
-	printf("Run like:\n"
+    fprintf(stderr, "Run like:\n"
 		   " ./proj2 P H S R W C\n"
 		   "	P - Hackers count == Serfs count\n"
 		   "	H - Hackers generation duration\n"
