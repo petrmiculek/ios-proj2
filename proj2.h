@@ -22,7 +22,6 @@
 #define sync_mem_lock_name "/xplagiat00b-sync_mem_lock_name"
 
 
-#define LOCKED 0 // Semaphore state
 #define BARRIER_BUFSIZE 1 // count
 #define SYNC_BUFSIZE 5 // action_count, hacker_count, serf_count, hacker_total, serf_total
 #define BARRIER_shm_SIZE (sizeof(int)*BARRIER_BUFSIZE)
@@ -100,11 +99,8 @@ int barrier_destroy(barrier_t *p_barrier);
 int sync_destroy(sync_t *p_shared);
 
 void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int role);
-// void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
 
-// @TODO turn into common function
 int generate_passengers(sync_t *p_shared, const int *arguments, FILE *fp, int role);
-int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
 
 
 void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order);

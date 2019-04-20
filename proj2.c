@@ -37,6 +37,8 @@ void barrier_1(barrier_t *p_barrier);
 
 void barrier_2(barrier_t *p_barrier);
 
+int test_arguments_validity(const int *arguments);
+
 int main(int argc, char **argv)
 {
     // ######## ARGUMENTS CHECKING ########
@@ -55,9 +57,9 @@ int main(int argc, char **argv)
         arguments[i - 1] = parse_int(argv[i]);
     }
 
-    // @TODO argument test
-
-
+    if (test_arguments_validity(arguments) == -1) {
+        return 1;
+    }
 
 
 
@@ -122,7 +124,7 @@ int main(int argc, char **argv)
             return_value = -1;
         }
 
-        exit(0);
+        exit(return_value);
     }
     else if (pid_hack_gen < 0)
     {
@@ -140,7 +142,7 @@ int main(int argc, char **argv)
             return_value = -1;
         }
 
-        exit(0);
+        exit(return_value);
     }
     else if (pid_serf_gen < 0)
     {
@@ -154,8 +156,8 @@ int main(int argc, char **argv)
     // ######## CLEANING UP ########
 
     for (int j = 0; j < (2 + (2 * arguments[OF_EACH_TYPE])); ++j) {
-        printf(":waiting for death:\n");
         wait(NULL);
+        //printf(":death %d accepted:\n", j);
     }
 
     if (pid_hack_gen > 0 && pid_serf_gen > 0)
@@ -181,6 +183,40 @@ int main(int argc, char **argv)
     }
 
 	return return_value;
+}
+
+int test_arguments_validity(const int arguments[ARGS_COUNT]) {
+    int return_value = 0;
+
+    if ((2 * arguments[OF_EACH_TYPE] < BOAT_CAPACITY) || (arguments[OF_EACH_TYPE] % 2 != 0)) {
+        return_value = -1;
+        warning_msg("invalid argument: passenger count\n");
+    }
+
+    if ((arguments[TIME_HACK_GEN] < 0) || (arguments[TIME_HACK_GEN] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: hack generation time\n");
+    }
+
+    if ((arguments[TIME_SERF_GEN] < 0) || (arguments[TIME_SERF_GEN] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: serf generation time\n");
+    }
+
+    if ((arguments[TIME_BOAT] < 0) || (arguments[TIME_BOAT] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: boat time\n");
+    }
+    if ((arguments[TIME_REQUEUE] < 0) || (arguments[TIME_REQUEUE] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: requeue time\n");
+    }
+    if (arguments[PIER_CAPACITY] < 5) {
+        return_value = -1;
+        warning_msg("invalid argument: pier capacity\n");
+    }
+
+    return return_value;
 }
 
 
@@ -215,7 +251,12 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
     }
 
-    waitpid(-1, NULL, 0); // @TODO Whose death does this wait for, /How many?/
+    for (int j = 0; j < arguments[OF_EACH_TYPE]; ++j) {
+        wait(NULL);
+        //printf(":Death accepted:\n");
+    }
+
+    // waitpid(-1, NULL, 0); // @TODO is this needed
     return 0;
 }
 
@@ -468,15 +509,15 @@ int parse_int(const char *str)
     long numerical_value = strtol(str, &end_ptr, 10);
 
 	errno = 0;
-	if (errno == ERANGE || strlen(str) == 0) {
+    if (errno == ERANGE || strlen(str) == 0 || strcmp(end_ptr, "") != 0) {
 	    // @TODO test end_ptr
-        warning_msg("parsing\n");
+        warning_msg("parsing - invalid format\n");
 		errno = 0;
 		return -1;
 	}
 
     if (numerical_value < 0) {
-		warning_msg("parsed value %s < 0\n", str);
+        warning_msg("parsing - negative value (%s)\n", str);
 	}
 
     return (int) numerical_value;
@@ -485,7 +526,7 @@ int parse_int(const char *str)
 int barrier_init(barrier_t *p_barrier)
 {
 
-	if((p_barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, 0644 )) == -1) {
+    if ((p_barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, SEM_ACCESS_RIGHTS)) == -1) {
 		warning_msg("%s: initializing shared mem\n", "p_barrier");
 		return -1;
 	}
@@ -500,17 +541,17 @@ int barrier_init(barrier_t *p_barrier)
 		return -1;
 	}
 
-	if((p_barrier->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED) {
+    if ((p_barrier->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "p_barrier", "1");
 		return -1;
 	}
 
-	if((p_barrier->turnstile1 = sem_open(barrier_turnstile1_name, O_CREAT, 0644, LOCKED)) == SEM_FAILED) {
+    if ((p_barrier->turnstile1 = sem_open(barrier_turnstile1_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "p_barrier", "2");
 		return -1;
 	}
 
-    if ((p_barrier->turnstile2 = sem_open(barrier_turnstile2_name, O_CREAT, 0644, 1)) == SEM_FAILED) {
+    if ((p_barrier->turnstile2 = sem_open(barrier_turnstile2_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "p_barrier", "3");
         return -1;
     }
@@ -548,25 +589,24 @@ int sync_init(sync_t *p_shared)
 	}
 
 
-
-	if((p_shared->mutex = sem_open(sync_mutex_name, O_CREAT, 0644, 1)) == SEM_FAILED) {
+    if ((p_shared->mutex = sem_open(sync_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "sync", "1");
 		return -1;
 	}
 
 
-    if((p_shared->mem_lock = sem_open(sync_mem_lock_name, O_CREAT, 0644, 1)) == SEM_FAILED) {
+    if ((p_shared->mem_lock = sem_open(sync_mem_lock_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "2");
         return -1;
     }
 
-	if((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED) {
+    if ((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "sync", "3");
 		return -1;
 	}
 
 
-	if((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, 0644, 0)) == SEM_FAILED) {
+    if ((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "sync", "4");
 		return -1;
 	}
@@ -670,9 +710,8 @@ void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role
 
     char* role_string = ((role == HACK) ? "HACK" : "SERF");
 
-    fprintf(fp, "%-4d (%d)  : %s %-10d: %-20s : %-8d : %d\n",
+    fprintf(fp, "%-4d : %s %-10d: %-20s : %-8d : %d\n",
             p_shared->shared_mem[ACTION],
-            getpid(), // @TODO REMOVE THIS
             role_string,
             intra_role_order,
             action_string,
