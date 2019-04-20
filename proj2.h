@@ -29,6 +29,8 @@
 
 #define BOAT_CAPACITY 4
 #define SEM_ACCESS_RIGHTS 0644 //@TODO Implement or throw away
+#define PRINT_PIER_STATE 1
+#define DONT_PRINT_PIER_STATE 0
 
 /// #warning Macros below ARE NOT ACTUAL VALUES of given variable
 // INDEXING macros for shm[...]
@@ -116,7 +118,7 @@ void print_help();
  * @param role
  * @param action_string
  */
-void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order,
-                            const char *action_string);
+void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string,
+                            bool print_pier_state);
 
 #endif //IOS_PROJ2_PROJ2_H

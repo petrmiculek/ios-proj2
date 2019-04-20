@@ -160,27 +160,23 @@ int main(int argc, char **argv)
         //printf(":death %d accepted:\n", j);
     }
 
-    if (pid_hack_gen > 0 && pid_serf_gen > 0)
-    {
-        if(barrier_destroy(&barrier1))
-        {
-            warning_msg("barrier_destroy\n");
-            return_value = 1;
-        }
 
-        if(sync_destroy(&sync1))
-        {
-            warning_msg("sync_destroy\n");
-            return_value = 1;
-        }
-
-        if (fclose(fp) == -1)
-        {
-            warning_msg("closing file\n");
-            return_value = 1;
-
-        }
+    if (barrier_destroy(&barrier1)) {
+        warning_msg("barrier_destroy\n");
+        return_value = 1;
     }
+
+    if (sync_destroy(&sync1)) {
+        warning_msg("sync_destroy\n");
+        return_value = 1;
+    }
+
+    if (fclose(fp) == -1) {
+        warning_msg("closing file\n");
+        return_value = 1;
+
+    }
+
 
 	return return_value;
 }
@@ -280,25 +276,29 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     srand(time(NULL) * getpid());
 
+    sem_wait(p_shared->mem_lock);
+
+    intra_role_order = p_shared->shared_mem[role_total];
+    print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
+
+    sem_post(p_shared->mem_lock);
+
+
     sem_wait(p_shared->mutex);
     // printf("%d got the mutex\n", getpid()); // DEBUG
 
+
 	sem_wait(p_shared->mem_lock);
     //printf("\t%d got the mem-mutex\n", getpid()); // DEBUG
-
     p_shared->shared_mem[role]++;
     p_shared->shared_mem[role_total]++;
-
-    intra_role_order = p_shared->shared_mem[role_total];
-
-    print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts");
 
 	sem_post(p_shared->mem_lock);
 
     //printf("\t%d released the mem-mutex\n", getpid()); // DEBUG
 
-	bool is_captain = 0;
 
+	bool is_captain = 0;
 
     if (p_shared->shared_mem[role] == BOAT_CAPACITY) {
         sem_post(role_queue);
@@ -327,18 +327,23 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     }
 
+    if (!is_captain) {
+        sem_wait(p_shared->mem_lock);
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
+        sem_post(p_shared->mem_lock);
+    }
+
+
     sem_wait(role_queue);
 
 
     if(is_captain)
     {
-        //sem_post(p_shared->mutex);
-
         // captain needs to let go of the main mutex, so that other processes can queue at the pier
-        // so row_boat uses mem_lock-mutex, instead
+        // so row_boat frees it and uses mem_lock-mutex, instead
         row_boat(p_shared, arguments, fp, role, intra_role_order); // "boards"
-        //sem_wait(p_shared->mutex);
     }
+
 
     barrier_1(p_shared->p_barrier);
 
@@ -348,7 +353,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
         //printf("\t%d waiting for memlock\n", getpid()); // DEBUG
         sem_wait(p_shared->mem_lock);
         //printf("\t%d taken memlock\n", getpid()); // DEBUG
-        print_action_plus_plus(fp, p_shared, role, intra_role_order, "member exits");
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "member exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock);
         //printf("\t%d released memlock\n", getpid()); // DEBUG
     }
@@ -358,7 +363,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     if(is_captain)
 	{
-        print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits");
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
 		sem_post(p_shared->mutex);
         // printf("%d released the mutex(cpt)\n", getpid()); // DEBUG
 
@@ -489,11 +494,14 @@ void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int 
     //printf("\t%d waiting for memlock\n", getpid()); // DEBUG
     sem_wait(p_shared->mem_lock);
     //printf("\t%d taken memlock\n", getpid()); // DEBUG
-    print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards");
+    print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
     //printf("\t%d releasing memlock\n", getpid()); // DEBUG
     sem_post(p_shared->mem_lock);
 
+
+    sem_post(p_shared->mutex);
     sleep_up_to(arguments[TIME_BOAT]);
+    sem_wait(p_shared->mutex);
 }
 
 void sleep_up_to(int maximum_sleep_time) {
@@ -510,7 +518,6 @@ int parse_int(const char *str)
 
 	errno = 0;
     if (errno == ERANGE || strlen(str) == 0 || strcmp(end_ptr, "") != 0) {
-	    // @TODO test end_ptr
         warning_msg("parsing - invalid format\n");
 		errno = 0;
 		return -1;
@@ -705,19 +712,29 @@ int sync_destroy(sync_t *p_shared)  {
 }
 
 
-void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string) {
+void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string,
+                            bool print_pier_state) {
     p_shared->shared_mem[ACTION]++;
 
     char* role_string = ((role == HACK) ? "HACK" : "SERF");
 
-    fprintf(fp, "%-4d : %s %-10d: %-20s : %-8d : %d\n",
-            p_shared->shared_mem[ACTION],
-            role_string,
-            intra_role_order,
-            action_string,
-            p_shared->shared_mem[HACK],
-            p_shared->shared_mem[SERF]
-    );
+    if (print_pier_state) {
+        fprintf(fp, "%-4d : %s %-10d: %-20s : %-8d : %d\n",
+                p_shared->shared_mem[ACTION],
+                role_string,
+                intra_role_order,
+                action_string,
+                p_shared->shared_mem[HACK],
+                p_shared->shared_mem[SERF]
+        );
+    } else {
+        fprintf(fp, "%-4d : %s %-10d: %-20s\n",
+                p_shared->shared_mem[ACTION],
+                role_string,
+                intra_role_order,
+                action_string
+        );
+    }
 }
 
 void print_help()
