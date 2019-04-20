@@ -88,6 +88,17 @@ typedef struct Barrier_t barrier_t;
 
 /**
  *  Process synchronization structure
+ *  Note: semaphore boat_seat is initialized to an unexpected value
+ *  (BOAT_CAPACITY + 1) --> 5
+ *  This is a constraint for the section where a passenger tries to
+ *  get on the boat. Since 5 passengers always make for a valid
+ *  passenger group, it should never cause a deadlock.
+ *
+ *  It also makes sure that when one group (of 4 passengers) is
+ *  crossing the river, no other complete group will try and board
+ *  the boat.
+ *
+ *
  */
 struct Sync_t {
     barrier_t* p_barrier;
