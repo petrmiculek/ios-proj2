@@ -1,8 +1,14 @@
+# Ignore all
 *
+
+# Unignore all with extensions
 !*.*
+
+# Unignore all dirs
+!*/
+
 
 .vscode/*
 *.o
-proj2
 rivercrossing.out
 rivercrossing_test.out

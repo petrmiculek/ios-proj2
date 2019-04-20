@@ -93,18 +93,17 @@ int parse_int(const char *str);
 
 // @TODO doxygen comments
 
-void DEBUG_print_args(int argc, const int *arguments);
-
 int barrier_init(barrier_t *p_barrier);
 int sync_init(sync_t *p_shared);
 
 int barrier_destroy(barrier_t *p_barrier);
 int sync_destroy(sync_t *p_shared);
 
-void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
-void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
+void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int role);
+// void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
 
-int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp);
+// @TODO turn into common function
+int generate_passengers(sync_t *p_shared, const int *arguments, FILE *fp, int role);
 int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp);
 
 

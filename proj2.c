@@ -37,10 +37,6 @@ void barrier_1(barrier_t *p_barrier);
 
 void barrier_2(barrier_t *p_barrier);
 
-void barrier_1_(const sync_t *p_shared);
-
-void barrier_2_(const sync_t *p_shared);
-
 int main(int argc, char **argv)
 {
     // ######## ARGUMENTS CHECKING ########
@@ -58,8 +54,6 @@ int main(int argc, char **argv)
     {
         arguments[i - 1] = parse_int(argv[i]);
     }
-
-    DEBUG_print_args(argc, arguments);
 
     // @TODO argument test
 
@@ -118,14 +112,13 @@ int main(int argc, char **argv)
 
 
     // ######## FORKING ########
-    printf("of each type%d\n", arguments[OF_EACH_TYPE]);
 
     pid_t pid_hack_gen = fork();
     if (pid_hack_gen == 0)
     {
-        if (generate_hackers(&sync1, arguments, fp) == -1)
+        if (generate_passengers(&sync1, arguments, fp, HACK) == -1)
         {
-            warning_msg("%s: generating hackers\n", "main");
+            warning_msg("generating hackers\n");
             return_value = -1;
         } else {
             printf(":hack-gen OK:\n");
@@ -133,18 +126,17 @@ int main(int argc, char **argv)
     }
     else if (pid_hack_gen < 0)
     {
-        warning_msg("%s: forking hackers\n", "main");
+        warning_msg("forking hack-gen\n");
         return_value = -1;
     }
-
 
 
     pid_t pid_serf_gen = fork();
     if (pid_serf_gen == 0)
     {
-        if (generate_serfs(&sync1, arguments, fp) == -1)
+        if (generate_passengers(&sync1, arguments, fp, SERF) == -1)
         {
-            warning_msg("%s: generating serfs\n", "main");
+            warning_msg("generating serfs\n");
             return_value = -1;
         } else {
             printf(":serf-gen OK:\n");
@@ -152,7 +144,7 @@ int main(int argc, char **argv)
     }
     else if (pid_serf_gen < 0)
     {
-        warning_msg("%s: forking serfs\n", "main");
+        warning_msg("forking serf-gen\n");
         return_value = -1;
     }
 
@@ -181,7 +173,7 @@ int main(int argc, char **argv)
 
         if (fclose(fp) == -1)
         {
-            warning_msg("%s: closing file", "main");
+            warning_msg("closing file\n");
             return_value = 1;
 
         }
@@ -191,60 +183,35 @@ int main(int argc, char **argv)
 }
 
 
+int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role) {
 
-
-int generate_hackers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp) {
-
-    pid_t pid_hacker;
+    pid_t pid;
     srand(time(NULL) * getpid());
+    int time_role_gen;
+
+    if (role == HACK) {
+        time_role_gen = TIME_HACK_GEN;
+    } else {
+        time_role_gen = TIME_SERF_GEN;
+
+    }
 
     for (int i = 0; i < arguments[OF_EACH_TYPE]; ++i) {
 
-        sleep_up_to(arguments[TIME_HACK_GEN]);
+        sleep_up_to(arguments[time_role_gen]);
 
-        pid_hacker = fork();
+        pid = fork();
 
-        if (pid_hacker == 0)
+        if (pid == 0)
         {
             // printf(":%d:child:hack:\n", getpid());// DEBUG
-            hacker_routine(p_shared, arguments, fp);
-        }
-
-        else if (pid_hacker < 0)
+            passenger_routine(p_shared, arguments, fp, role);
+        } else if (pid < 0)
         {
-            warning_msg("%s: fork fail","hacker_gen");
+            warning_msg("fork fail for role: %d\n", role);
             return -1;
         } else {
-            //printf(":%d:parent:hack:\n", getpid()); // DEBUG
-        }
-
-    }
-
-    waitpid(-1, NULL, 0);
-    // exit(0);
-    return 0;
-}
-
-int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp) {
-    pid_t pid_serf;
-    srand(time(NULL) * getpid());
-
-    for (int i = 0; i < arguments[OF_EACH_TYPE]; ++i) {
-
-        sleep_up_to(arguments[TIME_SERF_GEN]);
-
-        pid_serf = fork();
-
-        if (pid_serf == 0) {
-            //printf(":%d:child:serf:\n", getpid()); // DEBUG
-
-            serf_routine(p_shared, arguments, fp);
-        } else if (pid_serf < 0) {
-            warning_msg("%s: fork fail", "serf_gen");
-            return -1;
-        } else {
-            //printf(":%d:parent:serf:\n", getpid());// DEBUG
-
+            //printf(":%d:parent:%d:\n", getpid(), role); // DEBUG
         }
 
     }
@@ -255,66 +222,85 @@ int generate_serfs(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE* fp) 
 }
 
 
-void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
-{
+void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int role) {
+    int intra_role_order;
+    int role_total;
+    sem_t *role_queue;
+
+    int other_role;
+
+
+    if (role == HACK) {
+        other_role = SERF;
+        role_total = HACK_TOTAL;
+        role_queue = p_shared->hacker_queue;
+    } else {
+        other_role = HACK;
+        role_total = SERF_TOTAL;
+        role_queue = p_shared->serf_queue;
+    }
+
     srand(time(NULL) * getpid());
 
     sem_wait(p_shared->mutex);
-    // printf("hack %d got the mutex\n", getpid()); // DEBUG
+    // printf("%d got the mutex\n", getpid()); // DEBUG
 
 	sem_wait(p_shared->mem_lock);
-    // printf("hack %d got the mem-mutex\n", getpid()); // DEBUG
+    // printf("%d got the mem-mutex\n", getpid()); // DEBUG
 
-    p_shared->shared_mem[HACK]++;
-    p_shared->shared_mem[HACK_TOTAL]++;
+    p_shared->shared_mem[role]++;
+    p_shared->shared_mem[role_total]++;
 
-    int intra_hacker_order = p_shared->shared_mem[HACK_TOTAL];
-    print_action_plus_plus(fp, p_shared, HACK, intra_hacker_order, "starts"); // inside mutex
+    intra_role_order = p_shared->shared_mem[role_total];
+
+    print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts");
+
 	sem_post(p_shared->mem_lock);
-    //printf("hack %d released the mem-mutex\n", getpid()); // DEBUG
+
+    //printf("%d released the mem-mutex\n", getpid()); // DEBUG
 
 	bool is_captain = 0;
 
 
-
-	if(p_shared->shared_mem[HACK] == 4)
-	{
-		sem_post(p_shared->hacker_queue);
-		sem_post(p_shared->hacker_queue);
-		sem_post(p_shared->hacker_queue);
-		sem_post(p_shared->hacker_queue);
-		p_shared->shared_mem[HACK] = 0; // hackers 4 -> 0
+    if (p_shared->shared_mem[role] == BOAT_CAPACITY) {
+        sem_post(role_queue);
+        sem_post(role_queue);
+        sem_post(role_queue);
+        sem_post(role_queue);
+        p_shared->shared_mem[role] = 0; // role_count 4 -> 0
 
 		is_captain = 1;
-	}
-	else if (p_shared->shared_mem[HACK] == 2 && p_shared->shared_mem[SERF] >= 2)
-	{
-		sem_post(p_shared->hacker_queue);
-		sem_post(p_shared->hacker_queue);
+    } else if ((2 * p_shared->shared_mem[role] == BOAT_CAPACITY) &&
+               (2 * p_shared->shared_mem[other_role] >= BOAT_CAPACITY)) {
 
-		sem_post(p_shared->serf_queue);
-		sem_post(p_shared->serf_queue);
+        sem_post(p_shared->hacker_queue);
+        sem_post(p_shared->hacker_queue);
 
-		p_shared->shared_mem[SERF] -= 2;
-		p_shared->shared_mem[HACK] = 0;
-		
-		is_captain = 1;
-	}
-	else
-    {
-		sem_post(p_shared->mutex); // not enough passengers, release mutex
-        //   printf("hack %d released the mutex\n", getpid()); // DEBUG
+        sem_post(p_shared->serf_queue);
+        sem_post(p_shared->serf_queue);
+
+        p_shared->shared_mem[other_role] -= (BOAT_CAPACITY / 2);
+        p_shared->shared_mem[role] = 0;
+
+        is_captain = 1;
+    } else {
+        sem_post(p_shared->mutex); // not enough passengers, release mutex
+        //   printf("%d released the mutex\n", getpid()); // DEBUG
 
     }
 
-	sem_wait(p_shared->hacker_queue);
-
-	//board(HACK, p_shared); // not needed?
+    sem_wait(role_queue);
 
 
     if(is_captain)
     {
-        row_boat(p_shared, arguments, fp, HACK, intra_hacker_order); // "boards"
+        //sem_post(p_shared->mutex);
+
+        // captain needs to let go of the main mutex, so that other processes can queue at the pier
+
+        // so row_boat uses mem_lock-mutex, instead
+        row_boat(p_shared, arguments, fp, role, intra_role_order); // "boards"
+        //sem_wait(p_shared->mutex);
     }
 
     barrier_1(p_shared->p_barrier);
@@ -322,7 +308,7 @@ void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
     if(!is_captain)
     {
         sem_wait(p_shared->mem_lock);
-        print_action_plus_plus(fp, p_shared, HACK, intra_hacker_order, "member exits");
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "member exits");
         sem_wait(p_shared->mem_lock);
     }
 
@@ -331,9 +317,9 @@ void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 
     if(is_captain)
 	{
-        print_action_plus_plus(fp, p_shared, HACK, intra_hacker_order, "captain exits");
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits");
 		sem_post(p_shared->mutex);
-        // printf("hack %d released the mutex(cpt)\n", getpid()); // DEBUG
+        // printf("%d released the mutex(cpt)\n", getpid()); // DEBUG
 
     }
 
@@ -342,7 +328,7 @@ void hacker_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 
 void barrier_1(barrier_t *p_barrier) {
     sem_wait(p_barrier->barrier_mutex);
-    printf("hack %d got the barrier mutex1\n", getpid()); // DEBUG
+    printf("\t%d got the barrier mutex1\n", getpid()); // DEBUG
 
     *(p_barrier->barrier_shm) += 1;
     if (*(p_barrier->barrier_shm) == BOAT_CAPACITY) {
@@ -350,16 +336,17 @@ void barrier_1(barrier_t *p_barrier) {
         sem_post(p_barrier->turnstile1);
     }
 
+    printf("\t%d releasing the barrier mutex1(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
     sem_post(p_barrier->barrier_mutex);
-    printf("hack %d released the barrier mutex1\n", getpid()); // DEBUG
 
     sem_wait(p_barrier->turnstile1);
     sem_post(p_barrier->turnstile1);
+    printf("\t%d passed t1\n", getpid()); // DEBUG
 }
 
 void barrier_2(barrier_t *p_barrier) {
     sem_wait(p_barrier->barrier_mutex);
-    printf("hack %d got the barrier mutex2\n", getpid()); // DEBUG
+    printf("\t%d got the barrier mutex2\n", getpid()); // DEBUG
 
     *(p_barrier->barrier_shm) -= 1;
     if (*(p_barrier->barrier_shm) == 0) {
@@ -367,18 +354,20 @@ void barrier_2(barrier_t *p_barrier) {
         sem_post(p_barrier->turnstile2);
     }
 
+    printf("\t%d releasing the barrier mutex2(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
     sem_post(p_barrier->barrier_mutex);
-    printf("hack %d released the barrier mutex2\n", getpid()); // DEBUG
 
     sem_wait(p_barrier->turnstile2);
     sem_post(p_barrier->turnstile2);
+    printf("\t%d passed t2\n", getpid()); // DEBUG
 }
 
+/*
 void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 {
     srand(time(NULL) * getpid());
 
-    // ###################################### CTRL-V ######################################
+    // ###################################### CTRL-V ###############################
     sem_wait(p_shared->mutex);
     // printf("serf %d got the mutex\n", getpid()); // DEBUG
 
@@ -430,7 +419,11 @@ void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
     barrier_1(p_shared->p_barrier);
 
     if (!is_captain) {
+        sem_wait(p_shared->mem_lock);
+
         print_action_plus_plus(fp, p_shared, SERF, intra_serf_order, "member exits");
+        sem_wait(p_shared->mem_lock);
+
     }
 
     barrier_2(p_shared->p_barrier);
@@ -441,6 +434,7 @@ void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
         // printf("serf %d released the mutex(Cpt)\n", getpid());
     }
 }
+*/
 
 void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order)
 {
@@ -457,36 +451,24 @@ void sleep_up_to(int maximum_sleep_time) {
     printf(":%d slept for %f:\n", getpid(), sleep_time / 1000.0);
 }
 
-
-void DEBUG_print_args(int argc, const int *arguments) {
-	for (unsigned int j = 1; j < (unsigned int) argc; j++)
-	{
-		printf("%d, ", arguments[j - 1]);
-	}
-	puts("\n");
-}
-
-
 int parse_int(const char *str)
 {
 	char *end_ptr = NULL;
-	long val = strtol(str, &end_ptr, 10);
+    long numerical_value = strtol(str, &end_ptr, 10);
 
 	errno = 0;
 	if (errno == ERANGE || strlen(str) == 0) {
 	    // @TODO test end_ptr
-		fprintf(stderr, "parsing\n");
+        warning_msg("parsing\n");
 		errno = 0;
 		return -1;
 	}
 
-	if (val < 0) {
+    if (numerical_value < 0) {
 		warning_msg("parsed value %s < 0\n", str);
 	}
 
-
-
-	return (int)val;
+    return (int) numerical_value;
 }
 
 int barrier_init(barrier_t *p_barrier)
@@ -672,25 +654,20 @@ int sync_destroy(sync_t *p_shared)  {
 }
 
 
-void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order,
-                            const char *action_string) {
-    // value update and read should be atomic
-    //sem_wait(p_shared->mem_lock);
-        p_shared->shared_mem[ACTION]++;
+void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string) {
+    p_shared->shared_mem[ACTION]++;
 
     char* role_string = ((role == HACK) ? "HACK" : "SERF");
 
-    fprintf(fp, "%-8d: %s %-10d: %-20s : %-8d : %d\n",
+    fprintf(fp, "%-4d (%d)  : %s %-10d: %-20s : %-8d : %d\n",
             p_shared->shared_mem[ACTION],
+            getpid(), // @TODO REMOVE THIS
             role_string,
             intra_role_order,
             action_string,
             p_shared->shared_mem[HACK],
             p_shared->shared_mem[SERF]
     );
-
-    //sem_post(p_shared->mem_lock);
-
 }
 
 void print_help()
