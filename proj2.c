@@ -246,7 +246,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
     // printf("%d got the mutex\n", getpid()); // DEBUG
 
 	sem_wait(p_shared->mem_lock);
-    // printf("%d got the mem-mutex\n", getpid()); // DEBUG
+    printf("\t%d got the mem-mutex\n", getpid()); // DEBUG
 
     p_shared->shared_mem[role]++;
     p_shared->shared_mem[role_total]++;
@@ -257,7 +257,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
 	sem_post(p_shared->mem_lock);
 
-    //printf("%d released the mem-mutex\n", getpid()); // DEBUG
+    printf("\t%d released the mem-mutex\n", getpid()); // DEBUG
 
 	bool is_captain = 0;
 
@@ -307,9 +307,13 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     if(!is_captain)
     {
+
+        printf("\t%d waiting for memlock\n", getpid()); // DEBUG
         sem_wait(p_shared->mem_lock);
+        printf("\t%d taken memlock\n", getpid()); // DEBUG
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "member exits");
-        sem_wait(p_shared->mem_lock);
+        sem_post(p_shared->mem_lock);
+        printf("\t%d released memlock\n", getpid()); // DEBUG
     }
 
     barrier_2(p_shared->p_barrier);
@@ -327,6 +331,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 }
 
 void barrier_1(barrier_t *p_barrier) {
+    printf("\t%d waiting for barrier mutex1\n", getpid()); // DEBUG
     sem_wait(p_barrier->barrier_mutex);
     printf("\t%d got the barrier mutex1\n", getpid()); // DEBUG
 
@@ -339,12 +344,16 @@ void barrier_1(barrier_t *p_barrier) {
     printf("\t%d releasing the barrier mutex1(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
     sem_post(p_barrier->barrier_mutex);
 
+
+    printf("\t%d waiting at t1\n", getpid()); // DEBUG
     sem_wait(p_barrier->turnstile1);
     sem_post(p_barrier->turnstile1);
     printf("\t%d passed t1\n", getpid()); // DEBUG
 }
 
 void barrier_2(barrier_t *p_barrier) {
+
+    printf("\t%d waiting at b2-mutex-entry\n", getpid()); // DEBUG
     sem_wait(p_barrier->barrier_mutex);
     printf("\t%d got the barrier mutex2\n", getpid()); // DEBUG
 
@@ -357,6 +366,7 @@ void barrier_2(barrier_t *p_barrier) {
     printf("\t%d releasing the barrier mutex2(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
     sem_post(p_barrier->barrier_mutex);
 
+    printf("\t%d waiting at t2\n", getpid()); // DEBUG
     sem_wait(p_barrier->turnstile2);
     sem_post(p_barrier->turnstile2);
     printf("\t%d passed t2\n", getpid()); // DEBUG
@@ -438,9 +448,13 @@ void serf_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp)
 
 void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order)
 {
+    printf("\t%d waiting for memlock\n", getpid()); // DEBUG
     sem_wait(p_shared->mem_lock);
+    printf("\t%d taken memlock\n", getpid()); // DEBUG
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards");
+    printf("\t%d releasing memlock\n", getpid()); // DEBUG
     sem_post(p_shared->mem_lock);
+
     sleep_up_to(arguments[TIME_BOAT]);
 }
 
@@ -448,7 +462,7 @@ void sleep_up_to(int maximum_sleep_time) {
 
     useconds_t sleep_time = (random() % (maximum_sleep_time + 1)) * 1000;
     usleep(sleep_time);
-    printf(":%d slept for %f:\n", getpid(), sleep_time / 1000.0);
+    // printf(":%d slept for %f:\n", getpid(), sleep_time / 1000.0);
 }
 
 int parse_int(const char *str)
