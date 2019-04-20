@@ -7,10 +7,6 @@
  *
  * */
 
-
-// ./proj2 2 2 2 200 200 5
-// ./proj2 6 0 0 200 200 5
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -32,12 +28,6 @@
 #include "error_msg.h"
 #include "proj2.h"
 
-
-void barrier_1(barrier_t *p_barrier);
-
-void barrier_2(barrier_t *p_barrier);
-
-int test_arguments_validity(const int *arguments);
 
 int main(int argc, char **argv)
 {
@@ -61,11 +51,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-
-
-
-
     // ######## INITIALIZING ########
+
     FILE* fp;
 #ifdef NDEBUG
     if ((fp = fopen("rivercrossing.out", "w+")) == NULL){
@@ -89,29 +76,12 @@ int main(int argc, char **argv)
     }
 
     sync_t sync1;
-    if(sync_init(&sync1)){
+    if (sync_init(&sync1, arguments[PIER_CAPACITY])) {
         warning_msg("sync_init\n");
     }
     sync1.p_barrier = &barrier1;
 
     srand(time(NULL) * getpid());
-
-    /// PLAYING ----- START
-/*
-    sleep_up_to(arguments[TIME_HACK_GEN]);
-    sleep_up_to(arguments[TIME_SERF_GEN]);
-    sleep_up_to(arguments[TIME_BOAT]);
-    sleep_up_to(arguments[TIME_REQUEUE]);
-
-    barrier_destroy(&barrier1);
-    sync_destroy(&sync1);
-    if(sync1.p_barrier == &barrier1)
-        exit(12);
-*/
-    /// PLAYING ----- END
-
-
-
 
     // ######## FORKING ########
 
@@ -174,45 +144,10 @@ int main(int argc, char **argv)
     if (fclose(fp) == -1) {
         warning_msg("closing file\n");
         return_value = 1;
-
     }
 
 
 	return return_value;
-}
-
-int test_arguments_validity(const int arguments[ARGS_COUNT]) {
-    int return_value = 0;
-
-    if ((2 * arguments[OF_EACH_TYPE] < BOAT_CAPACITY) || (arguments[OF_EACH_TYPE] % 2 != 0)) {
-        return_value = -1;
-        warning_msg("invalid argument: passenger count\n");
-    }
-
-    if ((arguments[TIME_HACK_GEN] < 0) || (arguments[TIME_HACK_GEN] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: hack generation time\n");
-    }
-
-    if ((arguments[TIME_SERF_GEN] < 0) || (arguments[TIME_SERF_GEN] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: serf generation time\n");
-    }
-
-    if ((arguments[TIME_BOAT] < 0) || (arguments[TIME_BOAT] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: boat time\n");
-    }
-    if ((arguments[TIME_REQUEUE] < 0) || (arguments[TIME_REQUEUE] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: requeue time\n");
-    }
-    if (arguments[PIER_CAPACITY] < 5) {
-        return_value = -1;
-        warning_msg("invalid argument: pier capacity\n");
-    }
-
-    return return_value;
 }
 
 
@@ -226,7 +161,6 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
         time_role_gen = TIME_HACK_GEN;
     } else {
         time_role_gen = TIME_SERF_GEN;
-
     }
 
     for (int i = 0; i < arguments[OF_EACH_TYPE]; ++i) {
@@ -256,8 +190,7 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
     return 0;
 }
 
-
-void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int role) {
+void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role) {
     int intra_role_order;
     int role_total;
     sem_t *role_queue;
@@ -282,11 +215,24 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
     intra_role_order = p_shared->shared_mem[role_total];
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
 
+    bool is_requeueing = 0;
+    while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
+        is_requeueing = 1;
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
+        sem_post(p_shared->mem_lock);
+        sleep_up_to(arguments[TIME_REQUEUE]);
+        sem_wait(p_shared->mem_lock);
+    }
+
+    if (is_requeueing) {
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", PRINT_PIER_STATE);
+    }
     sem_post(p_shared->mem_lock);
 
 
     sem_wait(p_shared->mutex);
     // printf("%d got the mutex\n", getpid()); // DEBUG
+
 
 
 	sem_wait(p_shared->mem_lock);
@@ -299,6 +245,8 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     //printf("\t%d released the mem-lock\n", getpid()); // DEBUG
 
+    sem_wait(p_shared->boat_seat);
+    // process now holds both mutex and boat_seat, potential lock?
 
 	bool is_captain = 0;
 
@@ -331,7 +279,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
 
     sem_wait(role_queue);
 
-    sem_wait(p_shared->boat_seat);
+
 
     if(is_captain)
     {
@@ -378,50 +326,8 @@ void passenger_routine(sync_t *p_shared, const int arguments[6], FILE *fp, int r
     exit(0);
 }
 
-void barrier_1(barrier_t *p_barrier) {
-    //printf("\t%d waiting for barrier mutex1\n", getpid()); // DEBUG
-    sem_wait(p_barrier->barrier_mutex);
-    //printf("\t%d got the barrier mutex1\n", getpid()); // DEBUG
 
-    *(p_barrier->barrier_shm) += 1;
-    if (*(p_barrier->barrier_shm) == BOAT_CAPACITY) {
-        sem_wait(p_barrier->turnstile2);
-        sem_post(p_barrier->turnstile1);
-    }
-
-    //printf("\t%d releasing the barrier mutex1(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
-    sem_post(p_barrier->barrier_mutex);
-
-
-    //printf("\t%d waiting at t1\n", getpid()); // DEBUG
-    sem_wait(p_barrier->turnstile1);
-    sem_post(p_barrier->turnstile1);
-    //printf("\t%d passed t1\n", getpid()); // DEBUG
-}
-
-void barrier_2(barrier_t *p_barrier) {
-
-    //printf("\t%d waiting at b2-mutex-entry\n", getpid()); // DEBUG
-    sem_wait(p_barrier->barrier_mutex);
-    //printf("\t%d got the barrier mutex2\n", getpid()); // DEBUG
-
-    *(p_barrier->barrier_shm) -= 1;
-    if (*(p_barrier->barrier_shm) == 0) {
-        sem_wait(p_barrier->turnstile1);
-        sem_post(p_barrier->turnstile2);
-    }
-
-    //printf("\t%d releasing the barrier mutex2(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
-    sem_post(p_barrier->barrier_mutex);
-
-    //printf("\t%d waiting at t2\n", getpid()); // DEBUG
-    sem_wait(p_barrier->turnstile2);
-    sem_post(p_barrier->turnstile2);
-    //printf("\t%d passed t2\n", getpid()); // DEBUG
-}
-
-
-void row_boat(sync_t *p_shared, const int arguments[6], FILE *fp, int role, int intra_role_order)
+void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order)
 {
     //printf("\t%d waiting for memlock\n", getpid()); // DEBUG
     sem_wait(p_shared->mem_lock);
@@ -501,7 +407,7 @@ int barrier_init(barrier_t *p_barrier)
 	return 0;
 }
 
-int sync_init(sync_t *p_shared)
+int sync_init(sync_t *p_shared, int pier_capacity)
 {
     //int sync_shmID;
 
@@ -552,7 +458,12 @@ int sync_init(sync_t *p_shared)
 		return -1;
 	}
 
-    if ((p_shared->boat_seat = sem_open(sync_boat_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
+    if ((p_shared->boat_seat = sem_open(sync_boat_seat_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY + 1)) ==
+        SEM_FAILED) {
+        warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
+        return -1;
+    }
+    if ((p_shared->pier_space = sem_open(sync_pier_space_name, O_CREAT, SEM_ACCESS_RIGHTS, pier_capacity)) ==
         SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
         return -1;
@@ -628,7 +539,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_unlink(sync_hacker_queue_name) |
         sem_unlink(sync_serf_queue_name) |
         sem_unlink(sync_mem_lock_name) |
-        sem_unlink(sync_boat_mutex_name) |
+        sem_unlink(sync_boat_seat_name) |
         sem_unlink(sync_mutex_name) )
 		== -1)
 	{
