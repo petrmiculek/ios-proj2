@@ -47,7 +47,7 @@
 #define SYNC_shm_SIZE (sizeof(int)*SYNC_BUFSIZE)
 
 #define BOAT_CAPACITY 4
-#define SEM_ACCESS_RIGHTS 0644 //@TODO Implement or throw away
+#define SEM_ACCESS_RIGHTS 0644
 #define PRINT_PIER_STATE 1
 #define DONT_PRINT_PIER_STATE 0
 
@@ -77,6 +77,9 @@
 
 /**
  * Reusable barrier
+ * @see barrier_1
+ * @see barrier_2
+ *
  */
 struct Barrier_t {
     sem_t *turnstile1; // init 0
@@ -88,8 +91,9 @@ struct Barrier_t {
 typedef struct Barrier_t barrier_t;
 
 /**
- *  Process synchronization structure
- *  Note: semaphore boat_seat is initialized to an unexpected value
+ *  @brief Process synchronization structure
+ *
+ *  @note semaphore boat_seat is initialized to an unexpected value
  *  (BOAT_CAPACITY + 1) --> 5
  *  This is a constraint for the section where a passenger tries to
  *  get on the boat. Since 5 passengers always make for a valid
@@ -117,41 +121,134 @@ typedef struct Sync_t sync_t;
 
 
 /**
- * @brief String to Int with safety checks
+ * @brief String to Int conversion with safety checks
  * @param str string to parse from
  * @return valid integer value from string if the format is valid
  *		 -1 on invalid format
  */
 int parse_int(const char *str);
 
-// @TODO doxygen comments
-
-int barrier_init(barrier_t *p_barrier);
-
-int sync_init(sync_t *p_shared); //, int pier_capacity
-
-int barrier_destroy(barrier_t *p_barrier);
-int sync_destroy(sync_t *p_shared);
-
-void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role);
-
-int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role);
-
-
-void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order);
-
-void sleep_up_to(int maximum_sleep_time);
-
-void print_help();
 
 /**
- * @brief Prints out action in given format
- * @param fp
- * @param p_shared
- * @param role
- * @param action_string
+ *  @brief Initializes a barrier structure
+ * @param p_barrier barrier object to be initialized
+ * @return 0 on success,
+ *         non-zero value on failure
+ */
+int barrier_init(barrier_t *p_barrier);
+
+/**
+ * @brief Initializes single structure for process synchronization  (all semaphores, shared memory)
+ * @param p_shared synchronization object to be initialized
+ * @return zero on success,
+ *         non-zero value on failure
+ */
+int sync_init(sync_t *p_shared); //, int pier_capacity
+
+/**
+ * @brief Destroys a barrier structure, close&unlink semaphores, unmap&unlink shared mem
+ * @param p_barrier barrier object to be destroyed
+ * @return zero on success,
+ *         non-zero value on failure
+ */
+int barrier_destroy(barrier_t *p_barrier);
+
+/**
+ * @brief Destroys a barrier structure, close&unlink semaphores, unmap&unlink shared mem
+ * @param p_barrier barrier object to be destroyed
+ * @return zero on success,
+ *         non-zero value on failure
+ */
+int sync_destroy(sync_t *p_shared);
+
+/**
+ * @brief Generator of passenger processes
+ * @param p_shared synchronization object
+ * @param arguments program's arguments array
+ * @param fp output stream
+ * @param role passenger's role: HACK or SERF
+ * @return zero on successful forking
+ *         non-zero on failure
+ */
+int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role);
+
+/**
+ * @brief Runs the passenger's routine
+ * @param p_shared synchronization object
+ * @param arguments program's arguments array
+ * @param fp output stream
+ * @param role passenger's role: HACK or SERF
+ *
+ * @desc passenger is started up by one of the two generate_passengers processes
+ *       he announces his startup, then tries to join the queue at the pier, where
+ *       passengers wait for a boat. If the pier if full, he leaves the queue for some
+ *       time and then tries to come back. Both leaving the queue and the return are
+ *       announced. Once he can join the queue, he will wait (while announcing it).
+ *
+ *       Once a suitable passengers group (4H or 4S or 2H+2S) has gathered, the last one
+ *       becomes the captain, who calls the rest of the group to board. The crew spends
+ *       some time crossing the river (row_boat) and then calls their exit. Captain is the last
+ *       passenger to do so.
+ *
+ *       Each of the passengers runs this code, but in a separate process.
+ * @see Barrier_t, Sync_t Semaphores & Shared-memory-objects used and their meaning
+ */
+void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role);
+
+
+/**
+ * @brief Part of captain's passenger_routine,
+ * @desc announces the action and sleeps for some time, while others (in passenger_routine) wait for him
+ * @param p_shared synchronization object
+ * @param arguments program's arguments array
+ * @param fp output stream
+ * @param role HACK or SERF (also, macros expanding to 1 and 2, respectively)
+ * @param intra_role_order passenger's number per role (HACK 1, SERF 1, HACK 2, HACK 3, SERF 2)
+ */
+void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order);
+
+/**
+ * @brief Calling process sleeps for a random time up to a given amount
+ * @param maximum_sleep_time maximum sleep time in microseconds
+ */
+void sleep_up_to(int maximum_sleep_time);
+
+/**
+ * @brief Runs phase 1/2 of an reusable barrier (synchronization mechanism)
+ * @param p_barrier barrier object
+ */
+void barrier_1(barrier_t *p_barrier);
+
+/**
+ * @brief Runs phase 2/2 of an reusable barrier (synchronization mechanism)
+ * @param p_barrier barrier object
+ */
+void barrier_2(barrier_t *p_barrier);
+
+/**
+ * @brief checks arguments' validity
+ * @param arguments program's arguments
+ * @return zero on valid arguments
+ *         non-zero on invalid arguments
+ */
+int test_arguments_validity(const int arguments[ARGS_COUNT]);
+
+/**
+ * @brief Prints out action in given format and increments the action counter
+ * @warning callee needs to lock the Sync_t.mem_action_lock
+ * @param fp output stream
+ * @param p_shared synchronization object
+ * @param role HACK or SERF (also, macros expanding to 1 and 2, respectively)
+ * @param intra_role_order passenger's order per role
+ * @param action_string action that the callee is announcing
+ * @param print_pier_state print current waiting queue state
  */
 void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string,
                             bool print_pier_state);
+
+/**
+ * @brief prints out help text, telling the user how to run the program
+ */
+void print_help();
 
 #endif //IOS_PROJ2_PROJ2_H
