@@ -37,6 +37,7 @@
 #define sync_serf_queue_name "/xplagiat00b-sync_serf_queue_name"
 #define sync_mutex_name "/xplagiat00b-sync_mutex_name"
 #define sync_mem_lock_name "/xplagiat00b-sync_mem_lock_name"
+#define sync_mem_action_lock_name "/xplagiat00b-sync_mem_action_lock_name"
 #define sync_boat_seat_name "/xplagiat00b-sync_boat_seat_name"
 
 
@@ -105,6 +106,7 @@ struct Sync_t {
     sem_t* mutex; // init 1
     sem_t *boat_seat; // init BOAT_CAPACITY + 1
     sem_t* mem_lock; // init 1
+    sem_t *mem_action_lock; // init 1
     sem_t* hacker_queue; // init 0
     sem_t* serf_queue; // init 0
     int *shared_mem; // .action = 0, .hacker_count = 0,
@@ -127,7 +129,6 @@ int parse_int(const char *str);
 int barrier_init(barrier_t *p_barrier);
 
 int sync_init(sync_t *p_shared); //, int pier_capacity
-// @TODO remove all pier_capacity vars
 
 int barrier_destroy(barrier_t *p_barrier);
 int sync_destroy(sync_t *p_shared);
@@ -152,87 +153,5 @@ void print_help();
  */
 void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string,
                             bool print_pier_state);
-
-int test_arguments_validity(const int *arguments);
-
-void barrier_1(barrier_t *p_barrier);
-
-void barrier_2(barrier_t *p_barrier);
-
-int test_arguments_validity(const int arguments[ARGS_COUNT]) {
-    int return_value = 0;
-
-    if ((2 * arguments[OF_EACH_TYPE] < BOAT_CAPACITY) || (arguments[OF_EACH_TYPE] % 2 != 0)) {
-        return_value = -1;
-        warning_msg("invalid argument: passenger count\n");
-    }
-
-    if ((arguments[TIME_HACK_GEN] < 0) || (arguments[TIME_HACK_GEN] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: hack generation time\n");
-    }
-
-    if ((arguments[TIME_SERF_GEN] < 0) || (arguments[TIME_SERF_GEN] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: serf generation time\n");
-    }
-
-    if ((arguments[TIME_BOAT] < 0) || (arguments[TIME_BOAT] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: boat time\n");
-    }
-    if ((arguments[TIME_REQUEUE] < 0) || (arguments[TIME_REQUEUE] > 2000)) {
-        return_value = -1;
-        warning_msg("invalid argument: requeue time\n");
-    }
-    if (arguments[PIER_CAPACITY] < 5) {
-        return_value = -1;
-        warning_msg("invalid argument: pier capacity\n");
-    }
-
-    return return_value;
-}
-
-void barrier_1(barrier_t *p_barrier) {
-    //printf("\t%d waiting for barrier mutex1\n", getpid()); // DEBUG
-    sem_wait(p_barrier->barrier_mutex);
-    //printf("\t%d got the barrier mutex1\n", getpid()); // DEBUG
-
-    *(p_barrier->barrier_shm) += 1;
-    if (*(p_barrier->barrier_shm) == BOAT_CAPACITY) {
-        sem_wait(p_barrier->turnstile2);
-        sem_post(p_barrier->turnstile1);
-    }
-
-    //printf("\t%d releasing the barrier mutex1(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
-    sem_post(p_barrier->barrier_mutex);
-
-
-    //printf("\t%d waiting at t1\n", getpid()); // DEBUG
-    sem_wait(p_barrier->turnstile1);
-    sem_post(p_barrier->turnstile1);
-    //printf("\t%d passed t1\n", getpid()); // DEBUG
-}
-
-void barrier_2(barrier_t *p_barrier) {
-
-    //printf("\t%d waiting at b2-mutex-entry\n", getpid()); // DEBUG
-    sem_wait(p_barrier->barrier_mutex);
-    //printf("\t%d got the barrier mutex2\n", getpid()); // DEBUG
-
-    *(p_barrier->barrier_shm) -= 1;
-    if (*(p_barrier->barrier_shm) == 0) {
-        sem_wait(p_barrier->turnstile1);
-        sem_post(p_barrier->turnstile2);
-    }
-
-    //printf("\t%d releasing the barrier mutex2(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
-    sem_post(p_barrier->barrier_mutex);
-
-    //printf("\t%d waiting at t2\n", getpid()); // DEBUG
-    sem_wait(p_barrier->turnstile2);
-    sem_post(p_barrier->turnstile2);
-    //printf("\t%d passed t2\n", getpid()); // DEBUG
-}
 
 #endif //IOS_PROJ2_PROJ2_H

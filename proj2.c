@@ -29,6 +29,12 @@
 #include "proj2.h"
 
 
+int test_arguments_validity(const int *arguments);
+
+void barrier_1(barrier_t *p_barrier);
+
+void barrier_2(barrier_t *p_barrier);
+
 int main(int argc, char **argv)
 {
     // ######## ARGUMENTS CHECKING ########
@@ -54,16 +60,14 @@ int main(int argc, char **argv)
     // ######## INITIALIZING ########
 
     FILE* fp;
-#ifdef NDEBUG
+
     if ((fp = fopen("rivercrossing.out", "w+")) == NULL){
     warning_msg("%s: opening output file","main");
     return 1;
     }
 
     setbuf(fp, NULL);
-#else
-    fp = stdout;
-#endif
+
 
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
@@ -240,13 +244,13 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 
 
-	sem_wait(p_shared->mem_lock);
+    sem_wait(p_shared->mem_action_lock);
     //fprintf(stderr,, "\t%d got the mem-lock(2)\n", getpid()); // DEBUG
     p_shared->shared_mem[role]++;
 
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
 
-	sem_post(p_shared->mem_lock);
+    sem_post(p_shared->mem_action_lock);
 
     //fprintf(stderr,, "\t%d released the mem-lock(2)\n", getpid()); // DEBUG
 
@@ -299,12 +303,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     if(!is_captain)
     {
 
-        //fprintf(stderr,, "\t%d waiting for memlock(4)\n", getpid()); // DEBUG
-        sem_wait(p_shared->mem_lock);
-        //fprintf(stderr,, "\t%d taken memlock(4)\n", getpid()); // DEBUG
+        //fprintf(stderr,, "\t%d waiting for mem_action_lock(4)\n", getpid()); // DEBUG
+        sem_wait(p_shared->mem_action_lock);
+        //fprintf(stderr,, "\t%d taken mem_action_lock(4)\n", getpid()); // DEBUG
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "member exits", PRINT_PIER_STATE);
-        sem_post(p_shared->mem_lock);
-        //fprintf(stderr,, "\t%d released memlock(4)\n", getpid()); // DEBUG
+        sem_post(p_shared->mem_action_lock);
+        //fprintf(stderr,, "\t%d released mem_action_lock(4)\n", getpid()); // DEBUG
     }
 
     barrier_2(p_shared->p_barrier);
@@ -312,12 +316,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     if(is_captain)
 	{
-        //fprintf(stderr,, "\t%d waiting for memlock(6)\n", getpid()); // DEBUG
-        sem_wait(p_shared->mem_lock);
-        //fprintf(stderr,, "\t%d taken memlock(6)\n", getpid()); // DEBUG
+        //fprintf(stderr,, "\t%d waiting for mem_action_lock(6)\n", getpid()); // DEBUG
+        sem_wait(p_shared->mem_action_lock);
+        //fprintf(stderr,, "\t%d taken mem_action_lock(6)\n", getpid()); // DEBUG
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
-        sem_post(p_shared->mem_lock);
-        //fprintf(stderr,, "\t%d released memlock(6)\n", getpid()); // DEBUG
+        sem_post(p_shared->mem_action_lock);
+        //fprintf(stderr,, "\t%d released mem_action_lock(6)\n", getpid()); // DEBUG
 
         sem_post(p_shared->boat_seat);
         sem_post(p_shared->boat_seat);
@@ -333,12 +337,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order)
 {
-    //fprintf(stderr,, "\t%d waiting for memlock(5)\n", getpid()); // DEBUG
-    sem_wait(p_shared->mem_lock);
-    //fprintf(stderr,, "\t%d taken memlock(5)\n", getpid()); // DEBUG
+    //fprintf(stderr,, "\t%d waiting for mem_action_lock(5)\n", getpid()); // DEBUG
+    sem_wait(p_shared->mem_action_lock);
+    //fprintf(stderr,, "\t%d taken mem_action_lock(5)\n", getpid()); // DEBUG
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
-    //fprintf(stderr,, "\t%d releasing memlock(5)\n", getpid()); // DEBUG
-    sem_post(p_shared->mem_lock);
+    //fprintf(stderr,, "\t%d releasing mem_action_lock(5)\n", getpid()); // DEBUG
+    sem_post(p_shared->mem_action_lock);
 
 
     //fprintf(stderr,,"%d releasing mutex\n", getpid()); // DEBUG
@@ -450,21 +454,27 @@ int sync_init(sync_t *p_shared) // ,int pier_capacity)
         return -1;
     }
 
+    if ((p_shared->mem_action_lock = sem_open(sync_mem_action_lock_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) ==
+        SEM_FAILED) {
+        warning_msg("%s,%s: initializing semaphore\n", "sync", "3");
+        return -1;
+    }
+
 
     if ((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
-		warning_msg("%s,%s: initializing semaphore\n", "sync", "3");
+        warning_msg("%s,%s: initializing semaphore\n", "sync", "4");
 		return -1;
 	}
 
 
     if ((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
-		warning_msg("%s,%s: initializing semaphore\n", "sync", "4");
+        warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
 		return -1;
 	}
 
     if ((p_shared->boat_seat = sem_open(sync_boat_seat_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY + 1)) ==
         SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
+        warning_msg("%s,%s: initializing semaphore\n", "sync", "6");
         return -1;
     }
     /*
@@ -532,6 +542,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_close(p_shared->hacker_queue) |
         sem_close(p_shared->serf_queue) |
         sem_close(p_shared->mem_lock) |
+        sem_close(p_shared->mem_action_lock) |
         sem_close(p_shared->boat_seat) |
         sem_close(p_shared->mutex))
 		== -1)
@@ -544,6 +555,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_unlink(sync_hacker_queue_name) |
         sem_unlink(sync_serf_queue_name) |
         sem_unlink(sync_mem_lock_name) |
+        sem_unlink(sync_mem_action_lock_name) |
         sem_unlink(sync_boat_seat_name) |
         sem_unlink(sync_mutex_name) )
 		== -1)
@@ -604,4 +616,80 @@ void print_help()
 		   "	R - Rowing duration\n"
 		   "	W - Return time\n"
 		   "	C - Waiting queue (pier) capacity\n");
+}
+
+int test_arguments_validity(const int arguments[ARGS_COUNT]) {
+    int return_value = 0;
+
+    if ((2 * arguments[OF_EACH_TYPE] < BOAT_CAPACITY) || (arguments[OF_EACH_TYPE] % 2 != 0)) {
+        return_value = -1;
+        warning_msg("invalid argument: passenger count\n");
+    }
+
+    if ((arguments[TIME_HACK_GEN] < 0) || (arguments[TIME_HACK_GEN] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: hack generation time\n");
+    }
+
+    if ((arguments[TIME_SERF_GEN] < 0) || (arguments[TIME_SERF_GEN] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: serf generation time\n");
+    }
+
+    if ((arguments[TIME_BOAT] < 0) || (arguments[TIME_BOAT] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: boat time\n");
+    }
+    if ((arguments[TIME_REQUEUE] < 0) || (arguments[TIME_REQUEUE] > 2000)) {
+        return_value = -1;
+        warning_msg("invalid argument: requeue time\n");
+    }
+    if (arguments[PIER_CAPACITY] < 5) {
+        return_value = -1;
+        warning_msg("invalid argument: pier capacity\n");
+    }
+
+    return return_value;
+}
+
+void barrier_1(barrier_t *p_barrier) {
+    //printf("\t%d waiting for barrier mutex1\n", getpid()); // DEBUG
+    sem_wait(p_barrier->barrier_mutex);
+    //printf("\t%d got the barrier mutex1\n", getpid()); // DEBUG
+
+    *(p_barrier->barrier_shm) += 1;
+    if (*(p_barrier->barrier_shm) == BOAT_CAPACITY) {
+        sem_wait(p_barrier->turnstile2);
+        sem_post(p_barrier->turnstile1);
+    }
+
+    //printf("\t%d releasing the barrier mutex1(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
+    sem_post(p_barrier->barrier_mutex);
+
+
+    //printf("\t%d waiting at t1\n", getpid()); // DEBUG
+    sem_wait(p_barrier->turnstile1);
+    sem_post(p_barrier->turnstile1);
+    //printf("\t%d passed t1\n", getpid()); // DEBUG
+}
+
+void barrier_2(barrier_t *p_barrier) {
+
+    //printf("\t%d waiting at b2-mutex-entry\n", getpid()); // DEBUG
+    sem_wait(p_barrier->barrier_mutex);
+    //printf("\t%d got the barrier mutex2\n", getpid()); // DEBUG
+
+    *(p_barrier->barrier_shm) -= 1;
+    if (*(p_barrier->barrier_shm) == 0) {
+        sem_wait(p_barrier->turnstile1);
+        sem_post(p_barrier->turnstile2);
+    }
+
+    //printf("\t%d releasing the barrier mutex2(%d)\n", getpid(), *(p_barrier->barrier_shm)); // DEBUG
+    sem_post(p_barrier->barrier_mutex);
+
+    //printf("\t%d waiting at t2\n", getpid()); // DEBUG
+    sem_wait(p_barrier->turnstile2);
+    sem_post(p_barrier->turnstile2);
+    //printf("\t%d passed t2\n", getpid()); // DEBUG
 }

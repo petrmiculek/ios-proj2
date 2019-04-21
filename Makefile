@@ -8,7 +8,7 @@ CC=gcc
 CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
 LFLAGS=-lrt -lpthread
 BIN=proj2
-SOURCES= proj2.c error_msg.c
+SOURCES=proj2.c error_msg.c
 TESTS=check_syntax.sh
 RM=rm
 ARGS=6 0 0 200 200 5
