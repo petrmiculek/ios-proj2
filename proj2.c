@@ -197,40 +197,39 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     p_shared->shared_mem[role_total]++;
     intra_role_order = p_shared->shared_mem[role_total];
+
+    sem_wait(p_shared->mem_action_lock);
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
+    sem_post(p_shared->mem_action_lock);
 
-    bool is_requeueing = 0;
 
-    fprintf(stderr, "%d checking out pier\n", getpid()); // DEBUG
     while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
-        is_requeueing = 1;
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
-        fprintf(stderr, "%d releasing memlock(requeue)\n", getpid()); // DEBUG
         sem_post(p_shared->mem_lock);
-        sleep_up_to(arguments[TIME_REQUEUE]);
-        sem_wait(p_shared->mem_lock);
-        fprintf(stderr, "%d claimed memlock(requeue)(1)\n", getpid()); // DEBUG
-    }
 
-    if (is_requeueing) {
-        print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", PRINT_PIER_STATE);
+        sleep_up_to(arguments[TIME_REQUEUE]);
+
+        sem_wait(p_shared->mem_lock);
+        print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", DONT_PRINT_PIER_STATE);
+        //sem_post(p_shared->mem_lock);
     }
     sem_post(p_shared->mem_lock);
 
 
-    sem_wait(p_shared->mutex);
-
-
-
     sem_wait(p_shared->mem_action_lock);
 
+    sem_wait(p_shared->mem_lock);
     p_shared->shared_mem[role]++;
+    sem_post(p_shared->mem_lock);
 
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
-
     sem_post(p_shared->mem_action_lock);
 
     sem_wait(p_shared->boat_seat);
+
+    // DEBUG moved main mutex here
+    sem_wait(p_shared->mutex);
+
 
 	bool is_captain = 0;
 
@@ -266,8 +265,6 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     if(is_captain)
     {
-        // captain needs to let go of the main mutex, so that other processes can queue at the pier
-        // so row_boat frees it and uses mem_lock-mutex, instead
         row_boat(p_shared, arguments, fp, role, intra_role_order); // "boards"
     }
 
