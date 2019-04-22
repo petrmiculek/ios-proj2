@@ -25,7 +25,7 @@ clean:
 cleanall: clean
 	$(RM) $(BIN)
 
-zip: *.c *.h Makefile
+zip: proj2.c proj2.h error_msg.c error_msg.h Makefile
 	zip proj2.zip *.c *.h Makefile
 
 leaks: $(BIN)
