@@ -50,6 +50,8 @@
 #define SEM_ACCESS_RIGHTS 0644
 #define PRINT_PIER_STATE 1
 #define DONT_PRINT_PIER_STATE 0
+#define TIME_REQUEUE_MIN 20 // [microseconds]
+
 
 /// #warning Macros below ARE NOT ACTUAL VALUES of given variable
 // INDEXING macros for shm[...]
@@ -64,7 +66,7 @@
 #define TIME_HACK_GEN 1
 #define TIME_SERF_GEN 2
 #define TIME_BOAT 3
-#define TIME_REQUEUE 4
+#define TIME_REQUEUE_MAX 4
 #define PIER_CAPACITY 5
 #define ARGS_COUNT 6
 /// #endwarning
@@ -208,10 +210,11 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order);
 
 /**
- * @brief Calling process sleeps for a random time up to a given amount
+ * @brief Calling process sleeps for a random time in range <min, max>
+ * @param minimum_sleep_time minimum sleep time in microseconds
  * @param maximum_sleep_time maximum sleep time in microseconds
  */
-void sleep_up_to(int maximum_sleep_time);
+void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time);
 
 /**
  * @brief Runs phase 1/2 of an reusable barrier (synchronization mechanism)
