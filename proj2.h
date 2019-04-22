@@ -27,17 +27,17 @@
 #include <signal.h>
 #include "error_msg.h"
 
-#define barrier_shm_name "/xplagiat00b-barrier_shm_name"
-#define barrier_turnstile1_name "/xplagiat00b-barrier_turnstile1_name"
-#define barrier_turnstile2_name "/xplagiat00b-barrier_turnstile2_name"
-#define barrier_mutex_name "/xplagiat00b-barrier_mutex_name"
+#define barrier_shm_name "/xmicul08-barrier_shm_name"
+#define barrier_turnstile1_name "/xmicul08-barrier_turnstile1_name"
+#define barrier_turnstile2_name "/xmicul08-barrier_turnstile2_name"
+#define barrier_mutex_name "/xmicul08-barrier_mutex_name"
 
-#define sync_shm_name "/xplagiat00b-sync_shm_name"
-#define sync_hacker_queue_name "/xplagiat00b-sync_hacker_queue_name"
-#define sync_serf_queue_name "/xplagiat00b-sync_serf_queue_name"
-#define sync_mutex_name "/xplagiat00b-sync_mutex_name"
-#define sync_mem_lock_name "/xplagiat00b-sync_mem_lock_name"
-#define sync_boat_ready_name "/xplagiat00b-sync_boat_ready_name"
+#define sync_shm_name "/xmicul08-sync_shm_name"
+#define sync_hacker_queue_name "/xmicul08-sync_hacker_queue_name"
+#define sync_serf_queue_name "/xmicul08-sync_serf_queue_name"
+#define sync_mutex_name "/xmicul08-sync_mutex_name"
+#define sync_mem_lock_name "/xmicul08-sync_mem_lock_name"
+#define sync_boat_mutex_name "/xmicul08-sync_boat_mutex_name"
 
 
 #define BARRIER_BUFSIZE 1 // count
@@ -93,14 +93,34 @@ typedef struct Barrier_t barrier_t;
 
 /**
  *  @brief Process synchronization structure
+ *  @var mutex Semaphore which protects the wait-test_full_crew block for regular passengers
+ *             and the whole wait-test_full_crew-boards-captain_exits block for the captain
+ *             Calling wait (at the pier) and testing for full crew is a critical section.
  *
  *
+ * @var boat_mutex Semaphore that makes sure nobody boards the boat before the previous
+ *                 passengers have exited it.
  *
+ * @var hacker_queue Semaphore for HACk passengers to wait for the rest of the crew
+ * @var serf_queue Semaphore for SERF passengers to wait for the rest of the crew
+ *
+ * @var shared_mem int[SYNC_BUFSIZE] ( --> int[5] ), passengers' shared memory variables
+ *
+*                  index    content                macro for accessing (index)
+ *                 -----------------------------------------------------------
+ *                 [0]      action_count           [ACTION]
+ *                 [1]      current_hacker_count   [HACK]
+ *                 [2]      current_serf_count     [SERF]
+ *                 [3]      total_hacker_count     [HACK_TOTAL]
+ *                 [4]      total_serf_count       [SERF_TOTAL]
+ *
+ *
+ * @var mem_lock Mutex for guarding shared memory access
  */
 struct Sync_t {
     barrier_t* p_barrier;
     sem_t* mutex; // init 1
-    sem_t *boat_ready; // init BOAT_CAPACITY + 1
+    sem_t *boat_mutex; // init 1
     sem_t* mem_lock; // init 1
     sem_t* hacker_queue; // init 0
     sem_t* serf_queue; // init 0
@@ -165,12 +185,12 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
 /**
  * @brief Runs the passenger's routine
- * @param p_shared synchronization object
+ * @param p_shared synchronization object (contains the barrier object)
  * @param arguments program's arguments array
  * @param fp output stream
  * @param role passenger's role: HACK or SERF
  *
- * @desc passenger is started up by one of the two generate_passengers processes
+ * @desc A passenger is started up by one of the two generate_passengers processes,
  *       he announces his startup, then tries to join the queue at the pier, where
  *       passengers wait for a boat. If the pier if full, he leaves the queue for some
  *       time and then tries to come back. Both leaving the queue and the return are
@@ -182,7 +202,8 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
  *       passenger to do so.
  *
  *       Each of the passengers runs this code, but in a separate process.
- * @see Barrier_t, Sync_t Semaphores & Shared-memory-objects used and their meaning
+ * @see Barrier_t
+ * @see Sync_t
  */
 void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role);
 

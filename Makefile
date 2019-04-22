@@ -9,7 +9,7 @@ CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
 LFLAGS=-lrt -lpthread
 BIN=proj2
 SOURCES=proj2.c error_msg.c
-TESTS=check_syntax.sh
+SYNTAX-CHECK=check-syntax.sh
 RM=rm
 ARGS1=2 2 2 200 200 5
 ARGS2=6 0 0 200 200 5
@@ -31,7 +31,6 @@ zip: proj2.c proj2.h error_msg.c error_msg.h Makefile
 leaks: $(BIN)
 	valgrind --track-origins=yes --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no --show-reachable=yes --trace-children=yes ./$(BIN) $(ARGS) $(CMDLINE)
 
-
 test1: all
 	./$(BIN) $(ARGS1)
 
@@ -40,12 +39,12 @@ test2: all
 
 test-leave: all
 	./$(BIN) $(ARGS2)
-	cat rivercrossing.out | grep "leaves queue" | wc -l
-	cat rivercrossing.out | grep "is back" | wc -l
+	cat proj2.out | grep "leaves queue" | wc -l
+	cat proj2.out | grep "is back" | wc -l
 
-tests: all
-	./$(TESTS) $(BIN)
+syntax: all
+	./$(SYNTAX-CHECK) proj2.out
 
-# delete shared memory objects that were not cleaned during runtime
+# delete shared memory and semaphore objects that were not cleaned during runtime
 manual-cleanup:
 	./cleanup.sh $(CMDLINE)

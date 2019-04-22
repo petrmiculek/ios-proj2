@@ -5,6 +5,11 @@
  * @desc River crossing problem implementation in C,
  * 			using processes, semaphores
  *
+ *
+ *
+ *
+ *
+ * @see proj2.h for documentation
  * */
 
 #include <stdio.h>
@@ -30,7 +35,7 @@
 
 int main(int argc, char **argv)
 {
-    // ######## ARGUMENTS CHECKING ########
+    // ######## Arguments checking ########
 
 	int return_value = 0;
 	int arguments[ARGS_COUNT] = {0};
@@ -50,7 +55,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    // ######## INITIALIZING ########
+    // ######## Initializing ########
 
     FILE* fp;
 
@@ -80,7 +85,7 @@ int main(int argc, char **argv)
 
     srand(time(NULL) * getpid());
 
-    // ######## FORKING ########
+    // ######## Forking ########
     if (return_value == 0) {
 
 
@@ -111,12 +116,13 @@ int main(int argc, char **argv)
             return_value = -1;
         }
 
-        // ######## CLEANING UP ########
+        // ######## Cleaning up ########
 
         for (int j = 0; j < (2 + (2 * arguments[OF_EACH_TYPE])); ++j) {
             wait(NULL);
         }
-    }
+
+    } // (return_value == 0)
 
     if (barrier_destroy(&barrier1)) {
         warning_msg("barrier_destroy\n");
@@ -172,6 +178,7 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 }
 
 void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role) {
+    // ### Initializing routine ###
     int intra_role_order;
     int role_total;
     sem_t *role_queue;
@@ -191,6 +198,8 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     srand(time(NULL) * getpid());
 
 
+    // ### Start ###
+
     sem_wait(p_shared->mem_lock);
 
     p_shared->shared_mem[role_total]++;
@@ -203,6 +212,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     sem_wait(p_shared->mem_lock);
 
+    // ### Check pier capacity + leave queue, come back ###
 
     while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
@@ -216,6 +226,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     sem_post(p_shared->mem_lock);
 
 
+    // ### Wait at pier ###
+
+
     sem_wait(p_shared->mutex);
 
     sem_wait(p_shared->mem_lock);
@@ -226,6 +239,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     sem_post(p_shared->mem_lock);
 
+    // ### Check if boarding is possible (test_full_crew) ###
 
 	bool is_captain = 0;
 
@@ -233,7 +247,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     if (p_shared->shared_mem[role] == BOAT_CAPACITY) {
 
         sem_post(p_shared->mem_lock);
-        sem_wait(p_shared->boat_ready);
+        sem_wait(p_shared->boat_mutex);
 
         sem_post(role_queue);
         sem_post(role_queue);
@@ -249,7 +263,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
                (2 * p_shared->shared_mem[other_role] >= BOAT_CAPACITY)) {
         sem_post(p_shared->mem_lock);
 
-        sem_wait(p_shared->boat_ready);
+        sem_wait(p_shared->boat_mutex);
 
         sem_post(p_shared->hacker_queue);
         sem_post(p_shared->hacker_queue);
@@ -267,11 +281,16 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     } else {
         sem_post(p_shared->mem_lock);
 
-        sem_post(p_shared->mutex); // not enough passengers, release mutex
+        // not enough passengers, release mutex
+        sem_post(p_shared->mutex);
 
     }
 
+    // ### Wait for captain (members) ###
+
     sem_wait(role_queue);
+
+    // ### Board the boat (captain) ###
 
     if(is_captain)
     {
@@ -283,9 +302,11 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         sleep_in_range(0, arguments[TIME_BOAT]);
     }
 
+    // ### Meet up at the barrier 1 (members wait for captain to wake up) ###
 
     barrier_1(p_shared->p_barrier);
 
+    // ### Exit the boat (members) ###
 
     if(!is_captain)
     {
@@ -295,10 +316,13 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         sem_post(p_shared->mem_lock); // NIGHTLY
     }
 
+    // ### Meet up at the barrier 2 (captain waits for members to exit) ###
+
 
     barrier_2(p_shared->p_barrier);
 
 
+    // ### Exit the boat (captain) ###
     if(is_captain)
 	{
         sem_wait(p_shared->mem_lock); // NIGHTLY
@@ -306,7 +330,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
 
-        sem_post(p_shared->boat_ready);
+        sem_post(p_shared->boat_mutex);
         sem_post(p_shared->mutex);
 
     }
@@ -420,7 +444,7 @@ int sync_init(sync_t *p_shared) // ,int pier_capacity)
 		return -1;
 	}
 
-    if ((p_shared->boat_ready = sem_open(sync_boat_ready_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
+    if ((p_shared->boat_mutex = sem_open(sync_boat_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
         SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "6");
         return -1;
@@ -480,7 +504,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_close(p_shared->hacker_queue) |
         sem_close(p_shared->serf_queue) |
         sem_close(p_shared->mem_lock) |
-        sem_close(p_shared->boat_ready) |
+        sem_close(p_shared->boat_mutex) |
         sem_close(p_shared->mutex))
 		== -1)
 	{
@@ -492,7 +516,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_unlink(sync_hacker_queue_name) |
         sem_unlink(sync_serf_queue_name) |
         sem_unlink(sync_mem_lock_name) |
-        sem_unlink(sync_boat_ready_name) |
+        sem_unlink(sync_boat_mutex_name) |
         sem_unlink(sync_mutex_name) )
 		== -1)
 	{
