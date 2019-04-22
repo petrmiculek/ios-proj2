@@ -37,8 +37,7 @@
 #define sync_serf_queue_name "/xplagiat00b-sync_serf_queue_name"
 #define sync_mutex_name "/xplagiat00b-sync_mutex_name"
 #define sync_mem_lock_name "/xplagiat00b-sync_mem_lock_name"
-#define sync_mem_action_lock_name "/xplagiat00b-sync_mem_action_lock_name"
-#define sync_boat_seat_name "/xplagiat00b-sync_boat_seat_name"
+#define sync_boat_ready_name "/xplagiat00b-sync_boat_ready_name"
 
 
 #define BARRIER_BUFSIZE 1 // count
@@ -71,10 +70,10 @@
 #define ARGS_COUNT 6
 /// #endwarning
 
-#ifdef NDEBUG
-#define PRINT_ERRNO_IF_SET()
-#else
+#ifdef DEBUG
 #define PRINT_ERRNO_IF_SET() do { if(errno != 0) { warning_msg("errno = %d\n", errno); } else { printf("errno OK\n");} } while(0)
+#else
+#define PRINT_ERRNO_IF_SET()
 #endif // DEBUG
 
 /**
@@ -95,24 +94,14 @@ typedef struct Barrier_t barrier_t;
 /**
  *  @brief Process synchronization structure
  *
- *  @note semaphore boat_seat is initialized to an unexpected value
- *  (BOAT_CAPACITY + 1) --> 5
- *  This is a constraint for the section where a passenger tries to
- *  get on the boat. Since 5 passengers always make for a valid
- *  passenger group, it should never cause a deadlock.
- *
- *  It also makes sure that when one group (of 4 passengers) is
- *  crossing the river, no other complete group will try and board
- *  the boat.
  *
  *
  */
 struct Sync_t {
     barrier_t* p_barrier;
     sem_t* mutex; // init 1
-    sem_t *boat_seat; // init BOAT_CAPACITY + 1
+    sem_t *boat_ready; // init BOAT_CAPACITY + 1
     sem_t* mem_lock; // init 1
-    sem_t *mem_action_lock; // init 1
     sem_t* hacker_queue; // init 0
     sem_t* serf_queue; // init 0
     int *shared_mem; // .action = 0, .hacker_count = 0,
@@ -199,20 +188,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 
 /**
- * @brief Part of captain's passenger_routine,
- * @desc announces the action and sleeps for some time, while others (in passenger_routine) wait for him
- * @param p_shared synchronization object
- * @param arguments program's arguments array
- * @param fp output stream
- * @param role HACK or SERF (also, macros expanding to 1 and 2, respectively)
- * @param intra_role_order passenger's number per role (HACK 1, SERF 1, HACK 2, HACK 3, SERF 2)
- */
-void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order);
-
-/**
  * @brief Calling process sleeps for a random time in range <min, max>
- * @param minimum_sleep_time minimum sleep time in microseconds
- * @param maximum_sleep_time maximum sleep time in microseconds
+ * @param minimum_sleep_time minimum sleep time in miliseconds
+ * @param maximum_sleep_time maximum sleep time in miliseconds
  */
 void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time);
 

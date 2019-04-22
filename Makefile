@@ -26,7 +26,7 @@ cleanall: clean
 	$(RM) $(BIN)
 
 zip: *.c *.h Makefile
-	zip xmicul08.zip *.c *.h Makefile
+	zip proj2.zip *.c *.h Makefile
 
 leaks: $(BIN)
 	valgrind --track-origins=yes --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no --show-reachable=yes --trace-children=yes ./$(BIN) $(ARGS) $(CMDLINE)

@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 
     FILE* fp;
 
-    if ((fp = fopen("rivercrossing.out", "w+")) == NULL) {
+    if ((fp = fopen("proj2.out", "w+")) == NULL) {
         warning_msg("%s: opening output file", "main");
         return 1;
     }
@@ -198,12 +198,10 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
 
-    //sem_post(p_shared->mem_lock);
+    sem_post(p_shared->mem_lock);
 
 
-
-
-    //sem_wait(p_shared->mem_lock);
+    sem_wait(p_shared->mem_lock);
 
 
     while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
@@ -214,7 +212,6 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
         sem_wait(p_shared->mem_lock);
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", DONT_PRINT_PIER_STATE);
-        //sem_post(p_shared->mem_lock);
     }
     sem_post(p_shared->mem_lock);
 
@@ -236,7 +233,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     if (p_shared->shared_mem[role] == BOAT_CAPACITY) {
 
         sem_post(p_shared->mem_lock);
-        sem_wait(p_shared->boat_seat);
+        sem_wait(p_shared->boat_ready);
 
         sem_post(role_queue);
         sem_post(role_queue);
@@ -247,13 +244,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         p_shared->shared_mem[role] -= 4;
         sem_post(p_shared->mem_lock);
 
-
         is_captain = 1;
     } else if ((2 * p_shared->shared_mem[role] == BOAT_CAPACITY) &&
                (2 * p_shared->shared_mem[other_role] >= BOAT_CAPACITY)) {
         sem_post(p_shared->mem_lock);
 
-        sem_wait(p_shared->boat_seat);
+        sem_wait(p_shared->boat_ready);
 
         sem_post(p_shared->hacker_queue);
         sem_post(p_shared->hacker_queue);
@@ -275,23 +271,15 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     }
 
-
-
     sem_wait(role_queue);
-
 
     if(is_captain)
     {
-        //row_boat(p_shared, arguments, fp, role, intra_role_order); // "boards", -> mem_action_lock -> ; mutex kept by cpt
-
-
         sem_wait(p_shared->mem_lock); // NIGHTLY
 
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
 
-
-        //sem_post(p_shared->mutex); // NIGHTLY
         sleep_in_range(0, arguments[TIME_BOAT]);
     }
 
@@ -318,7 +306,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
 
-        sem_post(p_shared->boat_seat);
+        sem_post(p_shared->boat_ready);
         sem_post(p_shared->mutex);
 
     }
@@ -326,19 +314,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     exit(0);
 }
 
-
-void row_boat(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role, int intra_role_order)
-{
-    (void) p_shared;
-    (void) arguments;
-    (void) fp;
-    (void) role;
-    (void) intra_role_order;
-}
-
 void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time) {
     useconds_t sleep_time = ((random() % (maximum_sleep_time - minimum_sleep_time + 1)) + minimum_sleep_time) * 1000;
-    // don't sleep zero microseconds
+    // don't sleep zero miliseconds
     if (sleep_time)
         usleep(sleep_time);
 }
@@ -405,7 +383,6 @@ int sync_init(sync_t *p_shared) // ,int pier_capacity)
 		warning_msg("%s: initializing shared mem\n", "sync");
 		return -1;
 	}
-
 	
 	if(ftruncate(p_shared->shared_mem_fd , SYNC_shm_SIZE) == -1) {
 		warning_msg("%s: truncating shared mem\n", "sync");
@@ -417,44 +394,33 @@ int sync_init(sync_t *p_shared) // ,int pier_capacity)
 		warning_msg("%s: mapping shared mem\n", "sync");
 		return -1;
 	}
-	
 
 	if((close(p_shared->shared_mem_fd )) == -1) {
 		warning_msg("%s: closing shared mem\n", "sync");
 		return -1;
 	}
 
-
     if ((p_shared->mutex = sem_open(sync_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
 		warning_msg("%s,%s: initializing semaphore\n", "sync", "1");
 		return -1;
 	}
-
 
     if ((p_shared->mem_lock = sem_open(sync_mem_lock_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "2");
         return -1;
     }
 
-    if ((p_shared->mem_action_lock = sem_open(sync_mem_action_lock_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) ==
-        SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "sync", "3");
-        return -1;
-    }
-
-
     if ((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "4");
 		return -1;
 	}
-
 
     if ((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
 		return -1;
 	}
 
-    if ((p_shared->boat_seat = sem_open(sync_boat_seat_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
+    if ((p_shared->boat_ready = sem_open(sync_boat_ready_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
         SEM_FAILED) {
         warning_msg("%s,%s: initializing semaphore\n", "sync", "6");
         return -1;
@@ -514,8 +480,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_close(p_shared->hacker_queue) |
         sem_close(p_shared->serf_queue) |
         sem_close(p_shared->mem_lock) |
-        sem_close(p_shared->mem_action_lock) |
-        sem_close(p_shared->boat_seat) |
+        sem_close(p_shared->boat_ready) |
         sem_close(p_shared->mutex))
 		== -1)
 	{
@@ -527,8 +492,7 @@ int sync_destroy(sync_t *p_shared)  {
 	if((sem_unlink(sync_hacker_queue_name) |
         sem_unlink(sync_serf_queue_name) |
         sem_unlink(sync_mem_lock_name) |
-        sem_unlink(sync_mem_action_lock_name) |
-        sem_unlink(sync_boat_seat_name) |
+        sem_unlink(sync_boat_ready_name) |
         sem_unlink(sync_mutex_name) )
 		== -1)
 	{
@@ -633,7 +597,6 @@ void barrier_1(barrier_t *p_barrier) {
         sem_post(p_barrier->turnstile1);
     }
 
-    // fprintf(stderr, "waiting at turnstile1, barrier = %d, %d\n", *p_barrier->barrier_shm, getpid());
     sem_post(p_barrier->barrier_mutex);
 
     sem_wait(p_barrier->turnstile1);
@@ -650,7 +613,6 @@ void barrier_2(barrier_t *p_barrier) {
         sem_post(p_barrier->turnstile2);
     }
 
-    // fprintf(stderr, "waiting at turnstile2, barrier = %d, %d\n", *p_barrier->barrier_shm, getpid());
     sem_post(p_barrier->barrier_mutex);
 
 
