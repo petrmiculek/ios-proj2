@@ -11,7 +11,8 @@ BIN=proj2
 SOURCES=proj2.c error_msg.c
 TESTS=check_syntax.sh
 RM=rm
-ARGS=6 0 0 200 200 5
+ARGS1=2 2 2 200 200 5
+ARGS2=6 0 0 200 200 5
 
 .PHONY: clean
 
@@ -32,10 +33,15 @@ leaks: $(BIN)
 
 
 test1: all
-	./$(BIN) 2 2 2 200 200 5
+	./$(BIN) $(ARGS1)
 
 test2: all
-	./$(BIN) $(ARGS)
+	./$(BIN) $(ARGS2)
+
+test-leave: all
+	./$(BIN) $(ARGS2)
+	cat rivercrossing.out | grep "leaves queue" | wc -l
+	cat rivercrossing.out | grep "is back" | wc -l
 
 tests: all
 	./$(TESTS) $(BIN)

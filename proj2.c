@@ -59,7 +59,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    //fp = stderr; // DEBUG
 
     setbuf(fp, NULL);
     setbuf(stdout, NULL);
@@ -197,18 +196,15 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     p_shared->shared_mem[role_total]++;
     intra_role_order = p_shared->shared_mem[role_total];
 
-    //sem_wait(p_shared->mem_action_lock); NIGHTLY
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "starts", DONT_PRINT_PIER_STATE);
-    //sem_post(p_shared->mem_action_lock); NIGHTLY
 
-    //sem_post(p_shared->mem_lock); DEBUG
-
+    //sem_post(p_shared->mem_lock);
 
 
 
-    //sem_wait(p_shared->mem_lock); DEBUG
 
-    // fprintf(stderr, "pier: %d > %d + %d\n", arguments[PIER_CAPACITY] , p_shared->shared_mem[HACK] , p_shared->shared_mem[SERF]);
+    //sem_wait(p_shared->mem_lock);
+
 
     while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
@@ -226,18 +222,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     sem_wait(p_shared->mutex);
 
     sem_wait(p_shared->mem_lock);
-    // sem_wait(p_shared->mem_action_lock); NIGHTLY
 
     p_shared->shared_mem[role]++;
 
     print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
-    // sem_post(p_shared->mem_action_lock); NIGHTLY
 
     sem_post(p_shared->mem_lock);
-
-
-
-    // sem_wait(p_shared->boat_seat); NIGHTLY
 
 
 	bool is_captain = 0;
@@ -286,19 +276,17 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     }
 
 
-    // fprintf(stderr, "waiting at role_queue %d\n", getpid());
-    sem_wait(role_queue);
-    // fprintf(stderr, "passed role_queue %d\n", getpid());
 
+    sem_wait(role_queue);
 
 
     if(is_captain)
     {
         //row_boat(p_shared, arguments, fp, role, intra_role_order); // "boards", -> mem_action_lock -> ; mutex kept by cpt
 
-        // fprintf(stderr, "waiting for mem_lock, cpt rowing %d\n", getpid());
+
         sem_wait(p_shared->mem_lock); // NIGHTLY
-        // fprintf(stderr, "got mem_lock, cpt rowing %d\n", getpid());
+
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
 
@@ -307,9 +295,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         sleep_in_range(0, arguments[TIME_BOAT]);
     }
 
-    // fprintf(stderr, "waiting at barrier1 %d\n", getpid());
+
     barrier_1(p_shared->p_barrier);
-    // fprintf(stderr, "passed barrier1 %d\n", getpid());
+
 
     if(!is_captain)
     {
@@ -319,22 +307,19 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         sem_post(p_shared->mem_lock); // NIGHTLY
     }
 
-    // fprintf(stderr, "waiting at barrier2 %d\n", getpid());
+
     barrier_2(p_shared->p_barrier);
-    // fprintf(stderr, "passed barrier2 %d\n", getpid());
 
 
     if(is_captain)
 	{
-        // fprintf(stderr, "waiting for mem_lock, cpt exiting %d\n", getpid());
         sem_wait(p_shared->mem_lock); // NIGHTLY
-        // fprintf(stderr, "got mem_lock, cpt exiting %d\n", getpid());
+
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
 
         sem_post(p_shared->boat_seat);
-        // cpt no longer has his mutex up until here
-        sem_post(p_shared->mutex); // cpt lets go of his mutex here
+        sem_post(p_shared->mutex);
 
     }
 
