@@ -36,6 +36,7 @@
 #define sync_hacker_queue_name "/xmicul08-sync_hacker_queue_name"
 #define sync_serf_queue_name "/xmicul08-sync_serf_queue_name"
 #define sync_mutex_name "/xmicul08-sync_mutex_name"
+#define sync_entry_mutex_name "/xmicul08-sync_entry_mutex_name"
 #define sync_mem_lock_name "/xmicul08-sync_mem_lock_name"
 #define sync_boat_mutex_name "/xmicul08-sync_boat_mutex_name"
 
@@ -120,6 +121,7 @@ typedef struct Barrier_t barrier_t;
 struct Sync_t {
     barrier_t* p_barrier;
     sem_t* mutex; // init 1
+	sem_t *entry_mutex; // init 1
     sem_t *boat_mutex; // init 1
     sem_t* mem_lock; // init 1
     sem_t* hacker_queue; // init 0

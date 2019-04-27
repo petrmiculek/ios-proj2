@@ -4,7 +4,12 @@
 
     ls -a
 
-    ls -a | grep -E "*xplagiat*" | xargs rm {} -f
+    ls -a | grep -E "*xmicul*" | xargs rm {} -f
 
     # check contents just to make sure
     ls -a
+
+    ps aux | grep proj2
+
+    killall -9 ios_proj2
+    killall -9 proj2

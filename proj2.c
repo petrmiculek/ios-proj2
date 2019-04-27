@@ -5,9 +5,24 @@
  * @desc River crossing problem implementation in C,
  * 			using processes, semaphores
  *
+ * @props to Little Book of Semaphores, River Crossing solution
+ * 			(except this is, of course,
+ *			 1000 times bigger, full of bugs, and it contains an embedded web
+ *			 browser)
  *
  *
+ * @note CLion debugging tip:
+ *		set breakpoint before forking
+ *		start debugging
+ *		Debugger -> GDB:
+ *			set detach-on-fork off
+ * 		Debug all processes comfortably :o
  *
+ * 		Although, don't be fooled and try using
+ * 		 	set follow-on-fork child
+ *		as that only makes the debugger follow its first child
+ *		which be the HACK1
+ *		In hindsight, this was not as effective.
  *
  * @see proj2.h for documentation
  * */
@@ -118,9 +133,11 @@ int main(int argc, char **argv)
 
         // ######## Cleaning up ########
 
-        for (int j = 0; j < (2 + (2 * arguments[OF_EACH_TYPE])); ++j) {
+		for (int j = 0; j < (2 + (2 * arguments[OF_EACH_TYPE])); ++j)
+		{ //
             wait(NULL);
-        }
+			printf("%s pid:%d d:%d\n", __func__, getpid(), j);
+		}
 
     } // (return_value == 0)
 
@@ -137,7 +154,10 @@ int main(int argc, char **argv)
     if (fclose(fp) == -1) {
         warning_msg("closing file\n");
         return_value = 1;
-    }
+	} else
+	{
+		fp = NULL;
+	}
 
 	return return_value;
 }
@@ -172,10 +192,12 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
     for (int j = 0; j < arguments[OF_EACH_TYPE]; ++j) {
         wait(NULL);
+		printf("%s pid:%d d:%d\n", __func__, getpid(), j);
     }
 
     return 0;
 }
+
 
 void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *fp, int role) {
     // ### Initializing routine ###
@@ -210,34 +232,63 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     sem_post(p_shared->mem_lock);
 
 
-    sem_wait(p_shared->mem_lock);
-
-    // ### Check pier capacity + leave queue, come back ###
-
-    while (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF])) {
-        print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
-        sem_post(p_shared->mem_lock);
-
-        sleep_in_range(TIME_REQUEUE_MIN, arguments[TIME_REQUEUE_MAX]);
-
-        sem_wait(p_shared->mem_lock);
-        print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", DONT_PRINT_PIER_STATE);
-    }
-    sem_post(p_shared->mem_lock);
 
 
-    // ### Wait at pier ###
+	// ### Check pier capacity + leave queue, come back, wait ###
 
 
-    sem_wait(p_shared->mutex);
+	printf("  wait mutex start: %d\n", getpid());
+	sem_wait(p_shared->mutex);
+	printf("  got  mutex start: %d\n", getpid());
 
-    sem_wait(p_shared->mem_lock);
+	while (1)
+	{
+		sem_wait(p_shared->mem_lock);
 
-    p_shared->shared_mem[role]++;
+		// cannot board
+		if (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF]))
+		{
+			print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
+			sem_post(p_shared->mem_lock);
 
-    print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
 
-    sem_post(p_shared->mem_lock);
+			sem_post(p_shared->mutex);
+			printf("  left mutex pre-sleep: %d\n", getpid());
+
+
+			sleep_in_range(TIME_REQUEUE_MIN, arguments[TIME_REQUEUE_MAX]);
+
+
+			printf("    wait mutex post-sleep: %d\n", getpid());
+			sem_wait(p_shared->mutex);
+			printf("    got  mutex post-sleep: %d\n", getpid());
+
+
+			sem_wait(p_shared->mem_lock);
+			print_action_plus_plus(fp, p_shared, role, intra_role_order, "is back", DONT_PRINT_PIER_STATE);
+			sem_post(p_shared->mem_lock);
+		} else
+		{
+			p_shared->shared_mem[role]++;
+
+			print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
+
+			sem_post(p_shared->mem_lock);
+
+			break;
+		}
+	}
+	sem_post(p_shared->mutex);
+	printf("  left mutex start: %d\n", getpid());
+
+
+	printf("      wait boat_mutex: %d\n", getpid());
+	sem_wait(p_shared->boat_mutex);
+	printf("      got  boat_mutex: %d\n", getpid());
+
+	printf("        wait mutex inside: %d\n", getpid());
+	sem_wait(p_shared->mutex);
+	printf("        got  mutex inside: %d\n", getpid());
 
     // ### Check if boarding is possible (test_full_crew) ###
 
@@ -247,7 +298,6 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     if (p_shared->shared_mem[role] == BOAT_CAPACITY) {
 
         sem_post(p_shared->mem_lock);
-        sem_wait(p_shared->boat_mutex);
 
         sem_post(role_queue);
         sem_post(role_queue);
@@ -262,8 +312,6 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     } else if ((2 * p_shared->shared_mem[role] == BOAT_CAPACITY) &&
                (2 * p_shared->shared_mem[other_role] >= BOAT_CAPACITY)) {
         sem_post(p_shared->mem_lock);
-
-        sem_wait(p_shared->boat_mutex);
 
         sem_post(p_shared->hacker_queue);
         sem_post(p_shared->hacker_queue);
@@ -283,12 +331,20 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
         // not enough passengers, release mutex
         sem_post(p_shared->mutex);
+		printf("        left mutex member: %d\n", getpid());
+
+		sem_post(p_shared->boat_mutex);
+		printf("      left boat_mutex member: %d\n", getpid());
+
 
     }
 
     // ### Wait for captain (members) ###
 
-    sem_wait(role_queue);
+	printf("            wait role_queue: %d\n", getpid());
+	sem_wait(role_queue);
+	printf("            got  role_queue: %d\n", getpid());
+
 
     // ### Board the boat (captain) ###
 
@@ -298,6 +354,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
+
+		sem_post(p_shared->mutex);
+		printf("        left mutex captain: %d\n", getpid());
 
         sleep_in_range(0, arguments[TIME_BOAT]);
     }
@@ -331,7 +390,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         sem_post(p_shared->mem_lock); // NIGHTLY
 
         sem_post(p_shared->boat_mutex);
-        sem_post(p_shared->mutex);
+		printf("      left boat_mutex captain: %d\n", getpid());
 
     }
 
@@ -339,10 +398,16 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 }
 
 void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time) {
-    useconds_t sleep_time = ((random() % (maximum_sleep_time - minimum_sleep_time + 1)) + minimum_sleep_time) * 1000;
+
+	useconds_t sleep_time;
     // don't sleep zero miliseconds
-    if (sleep_time)
+	// +1 avoids (random() % 0)
+	// can sleep 1ms when min == max, but avoiding this makes it even more of a mess
+	if (maximum_sleep_time &&
+		(sleep_time = ((random() % (maximum_sleep_time - minimum_sleep_time + 1)) + minimum_sleep_time) * 1000))
+	{
         usleep(sleep_time);
+	}
 }
 
 int parse_int(const char *str)
@@ -352,13 +417,13 @@ int parse_int(const char *str)
 
 	errno = 0;
     if (errno == ERANGE || strlen(str) == 0 || strcmp(end_ptr, "") != 0) {
-        warning_msg("parsing - invalid format\n");
+		warning_msg("%s: format\n", __func__);
 		errno = 0;
 		return -1;
 	}
 
     if (numerical_value < 0) {
-        warning_msg("parsing - negative value (%s)\n", str);
+		warning_msg("%s: negative value (%s)\n", __func__, str);
 	}
 
     return (int) numerical_value;
@@ -367,32 +432,32 @@ int parse_int(const char *str)
 int barrier_init(barrier_t *p_barrier)
 {
     if ((p_barrier->barrier_shm_fd = shm_open(barrier_shm_name, O_CREAT | O_EXCL | O_RDWR, SEM_ACCESS_RIGHTS)) == -1) {
-		warning_msg("%s: initializing shared mem\n", "p_barrier");
+		warning_msg("%s: initializing shared mem\n", __func__);
 		return -1;
 	}
 
 	if((ftruncate(p_barrier->barrier_shm_fd, BARRIER_shm_SIZE)) == -1) {
-		warning_msg("%s: truncating shared mem", "p_barrier");
+		warning_msg("%s: truncating shared mem", __func__);
 		return -1;
 	}
 
 	if((p_barrier->barrier_shm = (int*)mmap(NULL, BARRIER_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_barrier->barrier_shm_fd, 0)) == MAP_FAILED) {
-		warning_msg("%s: mapping shared mem\n", "p_barrier");
+		warning_msg("%s: mapping shared mem\n", __func__);
 		return -1;
 	}
 
     if ((p_barrier->barrier_mutex = sem_open(barrier_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
-		warning_msg("%s,%s: initializing semaphore\n", "p_barrier", "1");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "1");
 		return -1;
 	}
 
     if ((p_barrier->turnstile1 = sem_open(barrier_turnstile1_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
-		warning_msg("%s,%s: initializing semaphore\n", "p_barrier", "2");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "2");
 		return -1;
 	}
 
     if ((p_barrier->turnstile2 = sem_open(barrier_turnstile2_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "p_barrier", "3");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "3");
         return -1;
     }
 
@@ -404,49 +469,55 @@ int barrier_init(barrier_t *p_barrier)
 int sync_init(sync_t *p_shared) // ,int pier_capacity)
 {
 	if(!(p_shared->shared_mem_fd = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))){
-		warning_msg("%s: initializing shared mem\n", "sync");
+		warning_msg("%s: initializing shared mem\n", __func__);
 		return -1;
 	}
 	
 	if(ftruncate(p_shared->shared_mem_fd , SYNC_shm_SIZE) == -1) {
-		warning_msg("%s: truncating shared mem\n", "sync");
+		warning_msg("%s: truncating shared mem\n", __func__);
 		return -1;
 	}
 
 	if((p_shared->shared_mem = (int*)mmap(NULL, SYNC_shm_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, p_shared->shared_mem_fd, 0))
 	    == MAP_FAILED) {
-		warning_msg("%s: mapping shared mem\n", "sync");
+		warning_msg("%s: mapping shared mem\n", __func__);
 		return -1;
 	}
 
 	if((close(p_shared->shared_mem_fd )) == -1) {
-		warning_msg("%s: closing shared mem\n", "sync");
+		warning_msg("%s: closing shared mem\n", __func__);
 		return -1;
 	}
 
     if ((p_shared->mutex = sem_open(sync_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
-		warning_msg("%s,%s: initializing semaphore\n", "sync", "1");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "1");
+		return -1;
+	}
+
+	if ((p_shared->entry_mutex = sem_open(sync_entry_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED)
+	{
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "2");
 		return -1;
 	}
 
     if ((p_shared->mem_lock = sem_open(sync_mem_lock_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "sync", "2");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "3");
         return -1;
     }
 
     if ((p_shared->hacker_queue = sem_open(sync_hacker_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "sync", "4");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "4");
 		return -1;
 	}
 
     if ((p_shared->serf_queue = sem_open(sync_serf_queue_name, O_CREAT, SEM_ACCESS_RIGHTS, 0)) == SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "sync", "5");
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "5");
 		return -1;
 	}
 
-    if ((p_shared->boat_mutex = sem_open(sync_boat_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, BOAT_CAPACITY)) ==
-        SEM_FAILED) {
-        warning_msg("%s,%s: initializing semaphore\n", "sync", "6");
+	if ((p_shared->boat_mutex = sem_open(sync_boat_mutex_name, O_CREAT, SEM_ACCESS_RIGHTS, 1)) == SEM_FAILED)
+	{
+		warning_msg("%s,%s: initializing semaphore\n", __func__, "6");
         return -1;
     }
 
@@ -468,7 +539,7 @@ int barrier_destroy(barrier_t *p_barrier)  {
 		sem_close(p_barrier->turnstile2))
 		== -1)
 	{
-		warning_msg("%s: closing semaphores\n", "p_barrier");
+		warning_msg("%s: closing semaphores\n", __func__);
 		return_value = -1;
 	}
 
@@ -477,18 +548,18 @@ int barrier_destroy(barrier_t *p_barrier)  {
 		sem_unlink(barrier_turnstile2_name))
 		== -1)
 	{
-		warning_msg("%s: unlinking semaphores\n", "p_barrier");
+		warning_msg("%s: unlinking semaphores\n", __func__);
 		return_value = -1;
 	}
 
 	if(munmap(p_barrier->barrier_shm, BARRIER_shm_SIZE) == -1)
 	{
-		warning_msg("%s: unmapping memory\n", "p_barrier");
+		warning_msg("%s: unmapping memory\n", __func__);
 		return_value = -1;
 	}
 	
 	if(shm_unlink(barrier_shm_name) == -1){
-		warning_msg("%s: unlinking memory\n", "p_barrier");
+		warning_msg("%s: unlinking memory\n", __func__);
 		return_value = -1;
 	}
     p_barrier->barrier_shm_fd = -1;
@@ -502,36 +573,38 @@ int sync_destroy(sync_t *p_shared)  {
    
 	int return_value = 0;
 	if((sem_close(p_shared->hacker_queue) |
-        sem_close(p_shared->serf_queue) |
-        sem_close(p_shared->mem_lock) |
-        sem_close(p_shared->boat_mutex) |
-        sem_close(p_shared->mutex))
+		sem_close(p_shared->serf_queue) |
+		sem_close(p_shared->mem_lock) |
+		sem_close(p_shared->boat_mutex) |
+		sem_close(p_shared->entry_mutex) |
+		sem_close(p_shared->mutex))
 		== -1)
 	{
-		warning_msg("%s: closing semaphores\n", "sync");
+		warning_msg("%s: closing semaphores\n", __func__);
 		return_value = -1;
 	}
 
 
 	if((sem_unlink(sync_hacker_queue_name) |
-        sem_unlink(sync_serf_queue_name) |
-        sem_unlink(sync_mem_lock_name) |
-        sem_unlink(sync_boat_mutex_name) |
-        sem_unlink(sync_mutex_name) )
+		sem_unlink(sync_serf_queue_name) |
+		sem_unlink(sync_mem_lock_name) |
+		sem_unlink(sync_boat_mutex_name) |
+		sem_unlink(sync_entry_mutex_name) |
+		sem_unlink(sync_mutex_name) )
 		== -1)
 	{
-		warning_msg("%s: unlinking semaphores\n", "sync");
+		warning_msg("%s: unlinking semaphores\n", __func__);
 		return_value = -1;
 	}
 
 	if(munmap(p_shared->shared_mem, SYNC_shm_SIZE) == -1)
 	{
-		warning_msg("%s: unmapping memory\n", "sync");
+		warning_msg("%s: unmapping memory\n", __func__);
 		return_value = -1;
 	}
 
 	if(shm_unlink(sync_shm_name) == -1){
-		warning_msg("%s: unlinking memory\n", "sync");
+		warning_msg("%s: unlinking memory\n", __func__);
 		return_value = -1;
 	}
 
@@ -541,8 +614,28 @@ int sync_destroy(sync_t *p_shared)  {
 }
 
 
-void print_action_plus_plus(FILE *fp, sync_t *p_shared, int role, int intra_role_order, const char *action_string,
-                            bool print_pier_state) {
+void print_action_plus_plus(FILE *fp,
+							sync_t *p_shared,
+							int role,
+							int intra_role_order,
+							const char *action_string,
+							bool print_pier_state)
+{
+	if (fp == NULL)
+	{
+		// this is a test for when the parent would close the file output stream before children processes exit;
+		warning_msg("%s: invalid output file pointer, pid %d\n", __func__, getpid());
+		return;
+	}
+
+	if (p_shared->shared_mem[ACTION] > 1000)
+	{
+		// DEBUG
+		warning_msg("%s: too many; pid=%d\n", __func__, getpid());
+		sem_post(p_shared->mem_lock);
+		exit(-1);
+	}
+
     p_shared->shared_mem[ACTION]++;
 
     char* role_string = ((role == HACK) ? "HACK" : "SERF");
@@ -583,30 +676,31 @@ int test_arguments_validity(const int arguments[ARGS_COUNT]) {
 
     if ((2 * arguments[OF_EACH_TYPE] < BOAT_CAPACITY) || (arguments[OF_EACH_TYPE] % 2 != 0)) {
         return_value = -1;
-        warning_msg("invalid argument: passenger count\n");
+		warning_msg("%s: passenger count\n", __func__);
     }
 
     if ((arguments[TIME_HACK_GEN] < 0) || (arguments[TIME_HACK_GEN] > 2000)) {
         return_value = -1;
-        warning_msg("invalid argument: hack generation time\n");
+		warning_msg("%s: hack generation time\n", __func__);
     }
 
     if ((arguments[TIME_SERF_GEN] < 0) || (arguments[TIME_SERF_GEN] > 2000)) {
         return_value = -1;
-        warning_msg("invalid argument: serf generation time\n");
+		warning_msg("%s: serf generation time\n", __func__);
     }
 
     if ((arguments[TIME_BOAT] < 0) || (arguments[TIME_BOAT] > 2000)) {
         return_value = -1;
-        warning_msg("invalid argument: boat time\n");
+		warning_msg("%s: boat time\n", __func__);
     }
-    if ((arguments[TIME_REQUEUE_MAX] < 0) || (arguments[TIME_REQUEUE_MAX] > 2000)) {
+	if ((arguments[TIME_REQUEUE_MAX] < 20) || (arguments[TIME_REQUEUE_MAX] > 2000))
+	{
         return_value = -1;
-        warning_msg("invalid argument: requeue time\n");
+		warning_msg("%s: requeue time\n", __func__);
     }
     if (arguments[PIER_CAPACITY] < 5) {
         return_value = -1;
-        warning_msg("invalid argument: pier capacity\n");
+		warning_msg("%s: pier capacity\n", __func__);
     }
 
     return return_value;

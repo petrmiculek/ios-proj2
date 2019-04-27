@@ -29,7 +29,7 @@ zip: proj2.c proj2.h error_msg.c error_msg.h Makefile
 	zip proj2.zip *.c *.h Makefile
 
 leaks: $(BIN)
-	valgrind --track-origins=yes --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no --show-reachable=yes --trace-children=yes ./$(BIN) $(ARGS) $(CMDLINE)
+	valgrind --track-origins=yes --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no --show-reachable=yes --trace-children=yes ./$(BIN) $(ARGS2) $(CMDLINE)
 
 test1: all
 	./$(BIN) $(ARGS1)
