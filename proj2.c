@@ -260,6 +260,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 			sleep_in_range(TIME_REQUEUE_MIN, arguments[TIME_REQUEUE_MAX]);
 
 
+			// if too many processes are sleeping, some will always take
+			// the mutex before the
+
 			printf("    wait mutex post-sleep: %d\n", getpid());
 			sem_wait(p_shared->mutex);
 			printf("    got  mutex post-sleep: %d\n", getpid());
@@ -360,11 +363,15 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 		printf("        left mutex captain: %d\n", getpid());
 
         sleep_in_range(0, arguments[TIME_BOAT]);
+
+		sem_wait(p_shared->mutex);
     }
 
     // ### Meet up at the barrier 1 (members wait for captain to wake up) ###
 
-    barrier_1(p_shared->p_barrier);
+	printf(" wait barrier1: %d\n", getpid());
+	barrier_1(p_shared->p_barrier);
+	printf(" past barrier1: %d\n", getpid());
 
     // ### Exit the boat (members) ###
 
@@ -379,7 +386,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     // ### Meet up at the barrier 2 (captain waits for members to exit) ###
 
 
+	printf("   past barrier2: %d\n", getpid());
     barrier_2(p_shared->p_barrier);
+	printf("   past barrier2: %d\n", getpid());
 
 
     // ### Exit the boat (captain) ###
@@ -389,6 +398,8 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
+
+		sem_post(p_shared->mutex);
 
         sem_post(p_shared->boat_mutex);
 		printf("      left boat_mutex captain: %d\n", getpid());
@@ -400,15 +411,17 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time) {
 
+	printf("called sleep %d\n", getpid());
 	useconds_t sleep_time;
     // don't sleep zero miliseconds
 	// +1 avoids (random() % 0)
 	// can sleep 1ms when min == max, but avoiding this makes it even more of a mess
-	if (maximum_sleep_time &&
-		(sleep_time = ((random() % (maximum_sleep_time - minimum_sleep_time + 1)) + minimum_sleep_time) * 1000))
+	if ((0 != maximum_sleep_time) &&
+		(0 != (sleep_time = ((random() % (maximum_sleep_time - minimum_sleep_time + 1)) + minimum_sleep_time) * 1000)))
 	{
         usleep(sleep_time);
 	}
+	printf("ended  sleep %d\n", getpid());
 }
 
 int parse_int(const char *str)
