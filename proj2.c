@@ -156,6 +156,7 @@ int main(int argc, char **argv)
         return_value = 1;
 	} else
 	{
+
 		fp = NULL;
 	}
 
@@ -468,7 +469,8 @@ int barrier_init(barrier_t *p_barrier)
 
 int sync_init(sync_t *p_shared) // ,int pier_capacity)
 {
-	if(!(p_shared->shared_mem_fd = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, S_IRUSR))){
+	if (!(p_shared->shared_mem_fd = shm_open(sync_shm_name, O_CREAT | O_EXCL | O_RDWR, SEM_ACCESS_RIGHTS)))
+	{
 		warning_msg("%s: initializing shared mem\n", __func__);
 		return -1;
 	}
