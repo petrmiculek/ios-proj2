@@ -239,9 +239,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 	// ### Check pier capacity + leave queue, come back, wait ###
 
 
-	printf("  wait entry_mutex start: %d\n", getpid());
+	//printf("  wait entry_mutex start: %d\n", getpid());
 	//sem_wait(p_shared->entry_mutex);
-	printf("  got  entry_mutex start: %d\n", getpid());
+	//printf("  got  entry_mutex start: %d\n", getpid());
 
 	while (1)
 	{
@@ -282,7 +282,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 		}
 	}
 	//sem_post(p_shared->entry_mutex);
-	printf("  left entry_mutex start: %d\n", getpid());
+	//printf("  left entry_mutex start: %d\n", getpid());
 
 
 	printf("      wait boat_mutex: %d\n", getpid());
