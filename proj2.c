@@ -136,7 +136,7 @@ int main(int argc, char **argv)
 		for (int j = 0; j < (2 + (2 * arguments[OF_EACH_TYPE])); ++j)
 		{ //
             wait(NULL);
-			printf("%s pid:%d d:%d\n", __func__, getpid(), j);
+			//printf("%s pid:%d d:%d\n", __func__, getpid(), j);
 		}
 
     } // (return_value == 0)
@@ -193,7 +193,7 @@ int generate_passengers(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE 
 
     for (int j = 0; j < arguments[OF_EACH_TYPE]; ++j) {
         wait(NULL);
-		printf("%s pid:%d d:%d\n", __func__, getpid(), j);
+		//printf("%s pid:%d d:%d\n", __func__, getpid(), j);
     }
 
     return 0;
@@ -261,6 +261,11 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 			sem_post(p_shared->mem_lock);
 		} else
 		{
+
+			p_shared->shared_mem[role]++;
+
+			print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
+
 			sem_post(p_shared->entry_mutex);
 
 			sem_post(p_shared->mem_lock);
@@ -274,21 +279,17 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 	sem_wait(p_shared->mutex);
 
-	sem_wait(p_shared->mem_lock);
-
-	p_shared->shared_mem[role]++;
-
-	print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
-
-	sem_post(p_shared->mem_lock);
-
 	// ### Check if boarding is possible (test_full_crew) ###
 
 	bool is_captain = 0;
 
     sem_wait(p_shared->mem_lock);
+
     if (p_shared->shared_mem[role] == BOAT_CAPACITY) {
 		sem_post(p_shared->mem_lock);
+
+		// Once there's a captain, wait for boat to come back
+		sem_wait(p_shared->boat_mutex);
 
         sem_post(role_queue);
         sem_post(role_queue);
@@ -296,13 +297,17 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         sem_post(role_queue);
 
         sem_wait(p_shared->mem_lock);
-        p_shared->shared_mem[role] -= 4;
+		p_shared->shared_mem[role] -= BOAT_CAPACITY;
         sem_post(p_shared->mem_lock);
 
         is_captain = 1;
+
     } else if ((2 * p_shared->shared_mem[role] == BOAT_CAPACITY) &&
                (2 * p_shared->shared_mem[other_role] >= BOAT_CAPACITY)) {
         sem_post(p_shared->mem_lock);
+
+		// Once there's a captain, wait for boat to come back
+		sem_wait(p_shared->boat_mutex);
 
 		sem_post(p_shared->hacker_queue);
         sem_post(p_shared->hacker_queue);
@@ -322,15 +327,13 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
         // not enough passengers, release mutex
         sem_post(p_shared->mutex);
-		printf("        left mutex member: %d\n", getpid());
-
     }
 
     // ### Wait for captain (members) ###
 
-	printf("            wait role_queue: %d\n", getpid());
+	//printf("            wait role_queue: %d\n", getpid());
 	sem_wait(role_queue);
-	printf("            got  role_queue: %d\n", getpid());
+	//printf("            got  role_queue: %d\n", getpid());
 
 
     // ### Board the boat (captain) ###
@@ -338,9 +341,12 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     if(is_captain)
     {
 		sem_wait(p_shared->mem_lock);
-
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "boards", PRINT_PIER_STATE);
 		sem_post(p_shared->mem_lock);
+
+
+		sem_post(p_shared->mutex);
+		//printf("        left mutex captain: %d\n", getpid());
 
         sleep_in_range(0, arguments[TIME_BOAT]);
 
@@ -348,9 +354,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
     // ### Meet up at the barrier 1 (members wait for captain to wake up) ###
 
-	printf(" wait barrier1: %d\n", getpid());
+	//printf(" wait barrier1: %d\n", getpid());
 	barrier_1(p_shared->p_barrier);
-	printf(" past barrier1: %d\n", getpid());
+	//printf(" past barrier1: %d\n", getpid());
 
     // ### Exit the boat (members) ###
 
@@ -365,9 +371,9 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     // ### Meet up at the barrier 2 (captain waits for members to exit) ###
 
 
-	printf("   wait barrier2: %d\n", getpid());
+	//printf("   wait barrier2: %d\n", getpid());
     barrier_2(p_shared->p_barrier);
-	printf("   past barrier2: %d\n", getpid());
+	//printf("   past barrier2: %d\n", getpid());
 
 
     // ### Exit the boat (captain) ###
@@ -378,8 +384,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
 		sem_post(p_shared->mem_lock);
 
-		sem_post(p_shared->mutex);
-		printf("        left mutex captain: %d\n", getpid());
+		sem_post(p_shared->boat_mutex);
 
 
     }
@@ -389,7 +394,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
 void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time) {
 
-	printf("called sleep %d\n", getpid());
+	//printf("called sleep %d\n", getpid());
 	useconds_t sleep_time;
     // don't sleep zero miliseconds
 	// +1 avoids (random() % 0)
@@ -399,7 +404,7 @@ void sleep_in_range(int minimum_sleep_time, int maximum_sleep_time) {
 	{
         usleep(sleep_time);
 	}
-	printf("ended  sleep %d\n", getpid());
+	//printf("ended  sleep %d\n", getpid());
 }
 
 int parse_int(const char *str)
