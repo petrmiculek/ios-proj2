@@ -73,12 +73,13 @@ int main(int argc, char **argv)
     // ######## Initializing ########
 
     FILE* fp;
-
+/*
     if ((fp = fopen("proj2.out", "w+")) == NULL) {
         warning_msg("%s: opening output file", "main");
         return 1;
     }
-
+*/
+	fp = stdout;
 
     setbuf(fp, NULL);
     setbuf(stdout, NULL);
@@ -150,7 +151,7 @@ int main(int argc, char **argv)
         warning_msg("sync_destroy\n");
         return_value = 1;
     }
-
+/*
     if (fclose(fp) == -1) {
         warning_msg("closing file\n");
         return_value = 1;
@@ -159,7 +160,7 @@ int main(int argc, char **argv)
 
 		fp = NULL;
 	}
-
+*/
 	return return_value;
 }
 
@@ -238,34 +239,24 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 	// ### Check pier capacity + leave queue, come back, wait ###
 
 
-	printf("  wait mutex start: %d\n", getpid());
-	sem_wait(p_shared->mutex);
-	printf("  got  mutex start: %d\n", getpid());
+	printf("  wait entry_mutex start: %d\n", getpid());
+	//sem_wait(p_shared->entry_mutex);
+	printf("  got  entry_mutex start: %d\n", getpid());
 
 	while (1)
 	{
 		sem_wait(p_shared->mem_lock);
 
 		// cannot board
+
 		if (arguments[PIER_CAPACITY] <= (p_shared->shared_mem[HACK] + p_shared->shared_mem[SERF]))
 		{
 			print_action_plus_plus(fp, p_shared, role, intra_role_order, "leaves queue", PRINT_PIER_STATE);
 			sem_post(p_shared->mem_lock);
 
-
-			sem_post(p_shared->mutex);
-			printf("  left mutex pre-sleep: %d\n", getpid());
-
-
+			//sem_post(p_shared->entry_mutex);
 			sleep_in_range(TIME_REQUEUE_MIN, arguments[TIME_REQUEUE_MAX]);
-
-
-			// if too many processes are sleeping, some will always take
-			// the mutex before the
-
-			printf("    wait mutex post-sleep: %d\n", getpid());
-			sem_wait(p_shared->mutex);
-			printf("    got  mutex post-sleep: %d\n", getpid());
+			//sem_wait(p_shared->entry_mutex);
 
 
 			sem_wait(p_shared->mem_lock);
@@ -273,17 +264,25 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 			sem_post(p_shared->mem_lock);
 		} else
 		{
+			sem_post(p_shared->mem_lock);
+
+			sem_wait(p_shared->mutex);
+
+			sem_wait(p_shared->mem_lock);
+
 			p_shared->shared_mem[role]++;
 
 			print_action_plus_plus(fp, p_shared, role, intra_role_order, "waits", PRINT_PIER_STATE);
 
 			sem_post(p_shared->mem_lock);
 
+			sem_post(p_shared->mutex);
+
 			break;
 		}
 	}
-	sem_post(p_shared->mutex);
-	printf("  left mutex start: %d\n", getpid());
+	//sem_post(p_shared->entry_mutex);
+	printf("  left entry_mutex start: %d\n", getpid());
 
 
 	printf("      wait boat_mutex: %d\n", getpid());
@@ -364,7 +363,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
 
         sleep_in_range(0, arguments[TIME_BOAT]);
 
-		sem_wait(p_shared->mutex);
+		//sem_wait(p_shared->mutex);
     }
 
     // ### Meet up at the barrier 1 (members wait for captain to wake up) ###
@@ -386,7 +385,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
     // ### Meet up at the barrier 2 (captain waits for members to exit) ###
 
 
-	printf("   past barrier2: %d\n", getpid());
+	printf("   wait barrier2: %d\n", getpid());
     barrier_2(p_shared->p_barrier);
 	printf("   past barrier2: %d\n", getpid());
 
@@ -399,7 +398,7 @@ void passenger_routine(sync_t *p_shared, const int arguments[ARGS_COUNT], FILE *
         print_action_plus_plus(fp, p_shared, role, intra_role_order, "captain exits", PRINT_PIER_STATE);
         sem_post(p_shared->mem_lock); // NIGHTLY
 
-		sem_post(p_shared->mutex);
+		//sem_post(p_shared->mutex);
 
         sem_post(p_shared->boat_mutex);
 		printf("      left boat_mutex captain: %d\n", getpid());
