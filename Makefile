@@ -5,7 +5,7 @@
 
 
 CC=gcc
-CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic
+CFLAGS=-std=gnu99 -Wall -Wextra -Werror -pedantic -O0
 LFLAGS=-lrt -lpthread
 BIN=proj2
 SOURCES=proj2.c error_msg.c
@@ -26,7 +26,7 @@ cleanall: clean
 	$(RM) $(BIN)
 
 zip: proj2.c proj2.h error_msg.c error_msg.h Makefile
-	zip proj2.zip *.c *.h Makefile
+	zip proj2.zip *.c *.h cleanup.sh Makefile
 
 leaks: $(BIN)
 	valgrind --track-origins=yes --leak-check=full --leak-resolution=med --track-origins=yes --vgdb=no --show-reachable=yes --trace-children=yes ./$(BIN) $(ARGS2) $(CMDLINE)
